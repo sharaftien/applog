@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
 import 'package:intl/intl.dart';
+import 'dart:typed_data';
 import '../database/database_helper.dart';
 import '../database/app_log_entry.dart';
 import 'app_details_page.dart';
@@ -16,11 +17,13 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     with SingleTickerProviderStateMixin {
   List<AppLogEntry>? uninstalledApps;
   List<AppLogEntry>? cachedApps;
+  List<AppLogEntry> displayApps = []; // Store sorted apps
   final DatabaseHelper dbHelper = DatabaseHelper();
   String? errorMessage;
   bool isRefreshing = false;
   late AnimationController _refreshController;
   late Animation<double> _refreshAnimation;
+  String sortBy = 'update_date'; // Default sort to Last Update
 
   @override
   void initState() {
@@ -43,6 +46,22 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     super.dispose();
   }
 
+  void _sortDisplayApps() {
+    setState(() {
+      displayApps.sort((a, b) {
+        if (sortBy == 'app_name') {
+          return a.appName.compareTo(b.appName);
+        } else if (sortBy == 'deletion_date') {
+          return (b.deletionDate ?? 0).compareTo(
+            a.deletionDate ?? 0,
+          ); // Descending
+        } else {
+          return b.updateDate.compareTo(a.updateDate); // Descending
+        }
+      });
+    });
+  }
+
   Future<void> _loadCachedUninstalledApps() async {
     try {
       print('Loading cached uninstalled apps...'); // Debug log
@@ -53,12 +72,17 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
       );
       final installedPackageNames =
           installedApps.map((app) => app.packageName).toList();
-      final logs = await dbHelper.getUninstalledAppLogs(installedPackageNames);
+      final logs = await dbHelper.getUninstalledAppLogs(
+        installedPackageNames,
+        sortBy: sortBy,
+      );
       if (mounted) {
         setState(() {
           cachedApps = logs;
+          displayApps = logs;
           errorMessage = null;
         });
+        _sortDisplayApps();
       }
     } catch (e) {
       print('Error loading cached uninstalled apps: $e'); // Debug log
@@ -100,6 +124,8 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
                 : currentTime;
         final icon = (app is ApplicationWithIcon) ? app.icon : null;
 
+        print('App: ${app.appName}, UpdateTime: $updateTime'); // Debug log
+
         if (existingLogs.isEmpty ||
             existingLogs.first.versionName != currentVersion) {
           final entry = AppLogEntry(
@@ -109,7 +135,8 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
             installDate: installTime,
             updateDate: updateTime,
             icon: icon,
-            deletionDate: null, // Explicitly null for installed apps
+            deletionDate: null,
+            notes: existingLogs.isNotEmpty ? existingLogs.first.notes : null,
           );
           await dbHelper.insertAppLog(entry);
         }
@@ -118,6 +145,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
       // Get uninstalled apps and update deletionDate if not set
       final uninstalledLogs = await dbHelper.getUninstalledAppLogs(
         installedPackageNames,
+        sortBy: sortBy,
       );
       for (var log in uninstalledLogs) {
         if (log.deletionDate == null) {
@@ -130,23 +158,26 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
             updateDate: log.updateDate,
             icon: log.icon,
             deletionDate: currentTime,
+            notes: log.notes,
           );
           await dbHelper.insertAppLog(updatedLog);
         }
       }
 
       print(
-        'Fetched ${uninstalledLogs.length} uninstalled app logs',
+        'Fetched ${uninstalledLogs.length} uninstalled app logs, sorted by $sortBy',
       ); // Debug log
 
       if (mounted) {
         setState(() {
           uninstalledApps = uninstalledLogs;
           cachedApps = null;
+          displayApps = uninstalledLogs;
           errorMessage = null;
           isRefreshing = false;
           _refreshController.stop();
         });
+        _sortDisplayApps();
       }
     } catch (e) {
       print('Error fetching uninstalled apps: $e'); // Debug log
@@ -162,19 +193,39 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
 
   @override
   Widget build(BuildContext context) {
-    if (uninstalledApps == null && cachedApps == null && errorMessage != null) {
+    if (displayApps.isEmpty && errorMessage != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Uninstalled Apps')),
         body: Center(child: Text(errorMessage!)),
       );
     }
 
-    final displayApps = uninstalledApps ?? cachedApps ?? [];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Uninstalled Apps'),
         actions: [
+          DropdownButton<String>(
+            value: sortBy,
+            items: const [
+              DropdownMenuItem(value: 'app_name', child: Text('Name')),
+              DropdownMenuItem(
+                value: 'update_date',
+                child: Text('Last Update'),
+              ),
+              DropdownMenuItem(
+                value: 'deletion_date',
+                child: Text('Deletion Date'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null && value != sortBy) {
+                setState(() {
+                  sortBy = value;
+                });
+                _sortDisplayApps();
+              }
+            },
+          ),
           IconButton(
             icon: AnimatedBuilder(
               animation: _refreshAnimation,

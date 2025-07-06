@@ -4,7 +4,7 @@ import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 6; // Incremented for notes column
+  static const _databaseVersion = 6; // Current version with notes
   static const table = 'app_logs';
 
   static Database? _database;
@@ -110,17 +110,23 @@ class DatabaseHelper {
     }
   }
 
-  Future<List<AppLogEntry>> getLatestAppLogs() async {
+  Future<List<AppLogEntry>> getLatestAppLogs({
+    String sortBy = 'app_name',
+  }) async {
     try {
       final db = await database;
+      final orderBy =
+          sortBy == 'update_date' ? 'update_date DESC' : 'app_name ASC';
       final maps = await db.rawQuery('''
         SELECT * FROM $table
         WHERE id IN (
           SELECT MAX(id) FROM $table GROUP BY package_name
         )
-        ORDER BY app_name ASC
+        ORDER BY $orderBy
       ''');
-      print('Retrieved ${maps.length} latest app logs'); // Debug log
+      print(
+        'Retrieved ${maps.length} latest app logs, sorted by $sortBy',
+      ); // Debug log
       return List.generate(maps.length, (i) => AppLogEntry.fromMap(maps[i]));
     } catch (e) {
       print('Error retrieving latest app logs: $e'); // Debug log
@@ -129,18 +135,28 @@ class DatabaseHelper {
   }
 
   Future<List<AppLogEntry>> getUninstalledAppLogs(
-    List<String> installedPackageNames,
-  ) async {
+    List<String> installedPackageNames, {
+    String sortBy = 'app_name',
+  }) async {
     try {
       final db = await database;
-      final maps = await db.query(
-        table,
-        where:
-            'package_name NOT IN (${installedPackageNames.map((_) => '?').join(',')})',
-        whereArgs: installedPackageNames,
-        orderBy: 'update_date DESC',
-      );
-      print('Retrieved ${maps.length} logs for uninstalled apps'); // Debug log
+      final orderBy =
+          sortBy == 'update_date'
+              ? 'update_date DESC'
+              : sortBy == 'deletion_date'
+              ? 'deletion_date DESC'
+              : 'app_name ASC';
+      final maps = await db.rawQuery('''
+        SELECT * FROM $table
+        WHERE package_name NOT IN (${installedPackageNames.map((_) => '?').join(',')})
+        AND id IN (
+          SELECT MAX(id) FROM $table GROUP BY package_name
+        )
+        ORDER BY $orderBy
+      ''', installedPackageNames);
+      print(
+        'Retrieved ${maps.length} logs for uninstalled apps, sorted by $sortBy',
+      ); // Debug log
       return List.generate(maps.length, (i) => AppLogEntry.fromMap(maps[i]));
     } catch (e) {
       print('Error retrieving uninstalled app logs: $e'); // Debug log

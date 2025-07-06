@@ -109,4 +109,24 @@ class DatabaseHelper {
       rethrow;
     }
   }
+
+  Future<List<AppLogEntry>> getUninstalledAppLogs(
+    List<String> installedPackageNames,
+  ) async {
+    try {
+      final db = await database;
+      final maps = await db.query(
+        table,
+        where:
+            'package_name NOT IN (${installedPackageNames.map((_) => '?').join(',')})',
+        whereArgs: installedPackageNames,
+        orderBy: 'update_date DESC',
+      );
+      print('Retrieved ${maps.length} logs for uninstalled apps'); // Debug log
+      return List.generate(maps.length, (i) => AppLogEntry.fromMap(maps[i]));
+    } catch (e) {
+      print('Error retrieving uninstalled app logs: $e'); // Debug log
+      rethrow;
+    }
+  }
 }

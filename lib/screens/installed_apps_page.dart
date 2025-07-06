@@ -25,7 +25,8 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
     try {
       print('Fetching installed apps...'); // Debug log
       final installedApps = await DeviceApps.getInstalledApplications(
-        includeAppIcons: false, // Avoid memory issues
+        includeAppIcons:
+            true, // Required for installTimeMillis and updateTimeMillis
         includeSystemApps: false,
         onlyAppsWithLaunchIntent: true,
       );
@@ -34,7 +35,14 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
       for (var app in installedApps) {
         final existingLogs = await dbHelper.getAppLogs(app.packageName);
         final currentVersion = app.versionName ?? 'N/A';
-        final installTime = DateTime.now().millisecondsSinceEpoch;
+        final installTime =
+            (app is ApplicationWithIcon)
+                ? app.installTimeMillis ?? DateTime.now().millisecondsSinceEpoch
+                : DateTime.now().millisecondsSinceEpoch;
+        final updateTime =
+            (app is ApplicationWithIcon)
+                ? app.updateTimeMillis ?? DateTime.now().millisecondsSinceEpoch
+                : DateTime.now().millisecondsSinceEpoch;
 
         if (existingLogs.isEmpty ||
             existingLogs.first.versionName != currentVersion) {
@@ -43,6 +51,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
             appName: app.appName,
             versionName: currentVersion,
             installDate: installTime,
+            updateDate: updateTime,
           );
           await dbHelper.insertAppLog(entry);
         }
@@ -81,12 +90,12 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
                   itemBuilder: (context, index) {
                     final log = logs[index];
                     final date = DateTime.fromMillisecondsSinceEpoch(
-                      log.installDate,
+                      log.updateDate,
                     );
                     return ListTile(
                       title: Text('Version: ${log.versionName}'),
                       subtitle: Text(
-                        'Installed: ${date.toString().split('.')[0]}',
+                        'Updated: ${date.toString().split('.')[0]}',
                       ),
                     );
                   },

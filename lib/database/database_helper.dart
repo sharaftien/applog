@@ -4,7 +4,7 @@ import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 2; // Incremented to force table creation
+  static const _databaseVersion = 3; // Incremented for update_date
   static const table = 'app_logs';
 
   static Database? _database;
@@ -29,7 +29,8 @@ class DatabaseHelper {
             package_name TEXT NOT NULL,
             app_name TEXT NOT NULL,
             version_name TEXT NOT NULL,
-            install_date INTEGER NOT NULL
+            install_date INTEGER NOT NULL,
+            update_date INTEGER NOT NULL
           )
         ''');
       },
@@ -37,15 +38,17 @@ class DatabaseHelper {
         print(
           'Upgrading database from version $oldVersion to $newVersion',
         ); // Debug log
-        if (oldVersion < 2) {
-          print('Creating table: $table during upgrade'); // Debug log
+        if (oldVersion < 3) {
+          print('Dropping and recreating table: $table'); // Debug log
+          await db.execute('DROP TABLE IF EXISTS $table');
           await db.execute('''
             CREATE TABLE $table (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               package_name TEXT NOT NULL,
               app_name TEXT NOT NULL,
               version_name TEXT NOT NULL,
-              install_date INTEGER NOT NULL
+              install_date INTEGER NOT NULL,
+              update_date INTEGER NOT NULL
             )
           ''');
         }
@@ -62,7 +65,7 @@ class DatabaseHelper {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       print(
-        'Inserted: ${entry.appName}, Version: ${entry.versionName}, Date: ${entry.installDate}',
+        'Inserted: ${entry.appName}, Version: ${entry.versionName}, Install: ${entry.installDate}, Update: ${entry.updateDate}',
       ); // Debug log
     } catch (e) {
       print('Error inserting app log: $e'); // Debug log
@@ -77,7 +80,7 @@ class DatabaseHelper {
         table,
         where: 'package_name = ?',
         whereArgs: [packageName],
-        orderBy: 'install_date DESC',
+        orderBy: 'update_date DESC',
       );
       print(
         'Retrieved ${maps.length} logs for package: $packageName',

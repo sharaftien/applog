@@ -48,12 +48,39 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     try {
       print('Fetching uninstalled apps...'); // Debug log
       final installedApps = await DeviceApps.getInstalledApplications(
-        includeAppIcons: false,
+        includeAppIcons: true, // Changed to true to cache icons
         includeSystemApps: false,
         onlyAppsWithLaunchIntent: true,
       );
       final installedPackageNames =
           installedApps.map((app) => app.packageName).toList();
+      // Cache icons for installed apps to ensure future uninstalled apps have icons
+      for (var app in installedApps) {
+        final existingLogs = await dbHelper.getAppLogs(app.packageName);
+        final currentVersion = app.versionName ?? 'N/A';
+        final installTime =
+            (app is ApplicationWithIcon)
+                ? app.installTimeMillis ?? DateTime.now().millisecondsSinceEpoch
+                : DateTime.now().millisecondsSinceEpoch;
+        final updateTime =
+            (app is ApplicationWithIcon)
+                ? app.updateTimeMillis ?? DateTime.now().millisecondsSinceEpoch
+                : DateTime.now().millisecondsSinceEpoch;
+        final icon = (app is ApplicationWithIcon) ? app.icon : null;
+
+        if (existingLogs.isEmpty ||
+            existingLogs.first.versionName != currentVersion) {
+          final entry = AppLogEntry(
+            packageName: app.packageName,
+            appName: app.appName,
+            versionName: currentVersion,
+            installDate: installTime,
+            updateDate: updateTime,
+            icon: icon,
+          );
+          await dbHelper.insertAppLog(entry);
+        }
+      }
       final logs = await dbHelper.getUninstalledAppLogs(installedPackageNames);
       print('Fetched ${logs.length} uninstalled app logs'); // Debug log
 
@@ -145,6 +172,17 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
                 itemBuilder: (context, index) {
                   final log = uninstalledApps![index];
                   return ListTile(
+                    leading:
+                        log.icon != null
+                            ? Image.memory(
+                              log.icon!,
+                              width: 40,
+                              height: 40,
+                              errorBuilder:
+                                  (context, error, stackTrace) =>
+                                      const Icon(Icons.delete, size: 40),
+                            )
+                            : const Icon(Icons.delete, size: 40),
                     title: Text(log.appName),
                     subtitle: Text(
                       'Version: ${log.versionName}\n'

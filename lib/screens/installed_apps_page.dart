@@ -87,6 +87,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
             (app is ApplicationWithIcon)
                 ? app.updateTimeMillis ?? DateTime.now().millisecondsSinceEpoch
                 : DateTime.now().millisecondsSinceEpoch;
+        final icon = (app is ApplicationWithIcon) ? app.icon : null;
 
         if (existingLogs.isEmpty ||
             existingLogs.first.versionName != currentVersion) {
@@ -96,6 +97,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
             versionName: currentVersion,
             installDate: installTime,
             updateDate: updateTime,
+            icon: icon,
           );
           await dbHelper.insertAppLog(entry);
         }
@@ -210,6 +212,26 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
                   final app = apps != null ? apps![index] : null;
                   final log = cachedApps != null ? cachedApps![index] : null;
                   return ListTile(
+                    leading:
+                        app is ApplicationWithIcon
+                            ? Image.memory(
+                              app.icon,
+                              width: 40,
+                              height: 40,
+                              errorBuilder:
+                                  (context, error, stackTrace) =>
+                                      const Icon(Icons.error),
+                            )
+                            : log?.icon != null
+                            ? Image.memory(
+                              log!.icon!,
+                              width: 40,
+                              height: 40,
+                              errorBuilder:
+                                  (context, error, stackTrace) =>
+                                      const Icon(Icons.error),
+                            )
+                            : const Icon(Icons.apps, size: 40),
                     title: Text(app?.appName ?? log!.appName),
                     subtitle: Text(
                       'Version: ${app?.versionName ?? log!.versionName}\n'

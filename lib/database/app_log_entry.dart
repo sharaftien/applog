@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart'; // For Uint8List
+
 class AppLogEntry {
   final int? id;
   final String packageName;
@@ -5,6 +7,7 @@ class AppLogEntry {
   final String versionName;
   final int installDate; // Unix timestamp in milliseconds (first install)
   final int updateDate; // Unix timestamp in milliseconds (last update)
+  final Uint8List? icon; // App icon as byte array
 
   AppLogEntry({
     this.id,
@@ -13,6 +16,7 @@ class AppLogEntry {
     required this.versionName,
     required this.installDate,
     required this.updateDate,
+    this.icon,
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +27,7 @@ class AppLogEntry {
       'version_name': versionName,
       'install_date': installDate,
       'update_date': updateDate,
+      'icon': icon,
     };
   }
 
@@ -34,6 +39,7 @@ class AppLogEntry {
       versionName: map['version_name'],
       installDate: map['install_date'],
       updateDate: map['update_date'],
+      icon: map['icon'] as Uint8List?,
     );
   }
 }

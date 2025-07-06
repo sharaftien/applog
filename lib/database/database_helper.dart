@@ -4,7 +4,7 @@ import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 3;
+  static const _databaseVersion = 4; // Incremented for icon column
   static const table = 'app_logs';
 
   static Database? _database;
@@ -30,7 +30,8 @@ class DatabaseHelper {
             app_name TEXT NOT NULL,
             version_name TEXT NOT NULL,
             install_date INTEGER NOT NULL,
-            update_date INTEGER NOT NULL
+            update_date INTEGER NOT NULL,
+            icon BLOB
           )
         ''');
       },
@@ -38,6 +39,10 @@ class DatabaseHelper {
         print(
           'Upgrading database from version $oldVersion to $newVersion',
         ); // Debug log
+        if (oldVersion < 4) {
+          print('Adding icon column to table: $table'); // Debug log
+          await db.execute('ALTER TABLE $table ADD icon BLOB');
+        }
         if (oldVersion < 3) {
           print('Dropping and recreating table: $table'); // Debug log
           await db.execute('DROP TABLE IF EXISTS $table');
@@ -48,7 +53,8 @@ class DatabaseHelper {
               app_name TEXT NOT NULL,
               version_name TEXT NOT NULL,
               install_date INTEGER NOT NULL,
-              update_date INTEGER NOT NULL
+              update_date INTEGER NOT NULL,
+              icon BLOB
             )
           ''');
         }

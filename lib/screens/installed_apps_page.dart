@@ -11,18 +11,62 @@ class InstalledAppsPage extends StatefulWidget {
   State<InstalledAppsPage> createState() => _InstalledAppsPageState();
 }
 
-class _InstalledAppsPageState extends State<InstalledAppsPage> {
+class _InstalledAppsPageState extends State<InstalledAppsPage>
+    with SingleTickerProviderStateMixin {
   List<Application>? apps;
+  List<AppLogEntry>? cachedApps;
   final DatabaseHelper dbHelper = DatabaseHelper();
   String? errorMessage;
+  bool isRefreshing = false;
+  late AnimationController _refreshController;
+  late Animation<double> _refreshAnimation;
 
   @override
   void initState() {
     super.initState();
+    _refreshController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    );
+    _refreshAnimation = Tween<double>(
+      begin: 0,
+      end: 360,
+    ).animate(_refreshController);
+    _loadCachedApps();
     _fetchInstalledApps();
   }
 
+  @override
+  void dispose() {
+    _refreshController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCachedApps() async {
+    try {
+      print('Loading cached apps...'); // Debug log
+      final logs = await dbHelper.getLatestAppLogs();
+      if (mounted) {
+        setState(() {
+          cachedApps = logs;
+          errorMessage = null;
+        });
+      }
+    } catch (e) {
+      print('Error loading cached apps: $e'); // Debug log
+      if (mounted) {
+        setState(() {
+          errorMessage = 'Failed to load cached apps: $e';
+        });
+      }
+    }
+  }
+
   Future<void> _fetchInstalledApps() async {
+    setState(() {
+      isRefreshing = true;
+      _refreshController.repeat();
+    });
     try {
       print('Fetching installed apps...'); // Debug log
       final installedApps = await DeviceApps.getInstalledApplications(
@@ -57,16 +101,23 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
         }
       }
 
-      setState(() {
-        installedApps.sort((a, b) => a.appName.compareTo(b.appName));
-        apps = installedApps;
-        errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          installedApps.sort((a, b) => a.appName.compareTo(b.appName));
+          apps = installedApps;
+          cachedApps = null;
+          errorMessage = null;
+          isRefreshing = false;
+          _refreshController.stop();
+        });
+      }
     } catch (e) {
       print('Error fetching apps: $e'); // Debug log
       if (mounted) {
         setState(() {
           errorMessage = 'Failed to load apps: $e';
+          isRefreshing = false;
+          _refreshController.stop();
         });
       }
     }
@@ -122,33 +173,55 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (apps == null && errorMessage != null) {
+    if (apps == null && cachedApps == null && errorMessage != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Installed Apps')),
         body: Center(child: Text(errorMessage!)),
       );
     }
 
-    if (apps == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    final displayApps = apps ?? cachedApps ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Installed Apps')),
-      body: ListView.builder(
-        itemCount: apps!.length,
-        itemBuilder: (context, index) {
-          final app = apps![index];
-          return ListTile(
-            title: Text(app.appName),
-            subtitle: Text(
-              'Version: ${app.versionName ?? 'N/A'}\n'
-              'Package: ${app.packageName}',
+      appBar: AppBar(
+        title: const Text('Installed Apps'),
+        actions: [
+          IconButton(
+            icon: AnimatedBuilder(
+              animation: _refreshAnimation,
+              builder:
+                  (context, child) => Transform.rotate(
+                    angle: _refreshAnimation.value * 3.14159 / 180,
+                    child: Icon(
+                      isRefreshing ? Icons.refresh : Icons.refresh_outlined,
+                    ),
+                  ),
             ),
-            onTap: () => _showVersionHistory(context, app),
-          );
-        },
+            onPressed: isRefreshing ? null : _fetchInstalledApps,
+          ),
+        ],
       ),
+      body:
+          displayApps.isEmpty && !isRefreshing
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.builder(
+                itemCount: displayApps.length,
+                itemBuilder: (context, index) {
+                  final app = apps != null ? apps![index] : null;
+                  final log = cachedApps != null ? cachedApps![index] : null;
+                  return ListTile(
+                    title: Text(app?.appName ?? log!.appName),
+                    subtitle: Text(
+                      'Version: ${app?.versionName ?? log!.versionName}\n'
+                      'Package: ${app?.packageName ?? log!.packageName}',
+                    ),
+                    onTap:
+                        app != null
+                            ? () => _showVersionHistory(context, app)
+                            : null,
+                  );
+                },
+              ),
     );
   }
 }

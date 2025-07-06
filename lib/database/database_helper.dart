@@ -4,7 +4,7 @@ import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 3; // Incremented for update_date
+  static const _databaseVersion = 3;
   static const table = 'app_logs';
 
   static Database? _database;
@@ -88,6 +88,24 @@ class DatabaseHelper {
       return List.generate(maps.length, (i) => AppLogEntry.fromMap(maps[i]));
     } catch (e) {
       print('Error retrieving app logs: $e'); // Debug log
+      rethrow;
+    }
+  }
+
+  Future<List<AppLogEntry>> getLatestAppLogs() async {
+    try {
+      final db = await database;
+      final maps = await db.rawQuery('''
+        SELECT * FROM $table
+        WHERE id IN (
+          SELECT MAX(id) FROM $table GROUP BY package_name
+        )
+        ORDER BY app_name ASC
+      ''');
+      print('Retrieved ${maps.length} latest app logs'); // Debug log
+      return List.generate(maps.length, (i) => AppLogEntry.fromMap(maps[i]));
+    } catch (e) {
+      print('Error retrieving latest app logs: $e'); // Debug log
       rethrow;
     }
   }

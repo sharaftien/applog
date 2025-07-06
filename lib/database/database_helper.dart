@@ -4,7 +4,7 @@ import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 5; // Incremented for deletion_date column
+  static const _databaseVersion = 6; // Incremented for notes column
   static const table = 'app_logs';
 
   static Database? _database;
@@ -32,7 +32,8 @@ class DatabaseHelper {
             install_date INTEGER NOT NULL,
             update_date INTEGER NOT NULL,
             icon BLOB,
-            deletion_date INTEGER
+            deletion_date INTEGER,
+            notes TEXT
           )
         ''');
       },
@@ -48,6 +49,10 @@ class DatabaseHelper {
           print('Adding deletion_date column to table: $table'); // Debug log
           await db.execute('ALTER TABLE $table ADD deletion_date INTEGER');
         }
+        if (oldVersion < 6) {
+          print('Adding notes column to table: $table'); // Debug log
+          await db.execute('ALTER TABLE $table ADD notes TEXT');
+        }
         if (oldVersion < 3) {
           print('Dropping and recreating table: $table'); // Debug log
           await db.execute('DROP TABLE IF EXISTS $table');
@@ -60,7 +65,8 @@ class DatabaseHelper {
               install_date INTEGER NOT NULL,
               update_date INTEGER NOT NULL,
               icon BLOB,
-              deletion_date INTEGER
+              deletion_date INTEGER,
+              notes TEXT
             )
           ''');
         }
@@ -77,7 +83,7 @@ class DatabaseHelper {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       print(
-        'Inserted: ${entry.appName}, Version: ${entry.versionName}, Install: ${entry.installDate}, Update: ${entry.updateDate}, Deletion: ${entry.deletionDate ?? 'N/A'}',
+        'Inserted: ${entry.appName}, Version: ${entry.versionName}, Install: ${entry.installDate}, Update: ${entry.updateDate}, Deletion: ${entry.deletionDate ?? 'N/A'}, Notes: ${entry.notes ?? 'N/A'}',
       ); // Debug log
     } catch (e) {
       print('Error inserting app log: $e'); // Debug log

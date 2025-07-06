@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../database/app_log_entry.dart';
 import '../database/database_helper.dart';
 
-class AppDetailsPage extends StatelessWidget {
+class AppDetailsPage extends StatefulWidget {
   final Application? app; // Null for uninstalled apps
   final AppLogEntry log; // Used for uninstalled apps or fallback
   final DatabaseHelper dbHelper; // Injected for database access
@@ -17,21 +17,90 @@ class AppDetailsPage extends StatelessWidget {
   });
 
   @override
+  State<AppDetailsPage> createState() => _AppDetailsPageState();
+}
+
+class _AppDetailsPageState extends State<AppDetailsPage> {
+  late Future<List<AppLogEntry>> _appLogsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _appLogsFuture = widget.dbHelper.getAppLogs(
+      widget.app?.packageName ?? widget.log.packageName,
+    );
+  }
+
+  // Show dialog to add/edit notes for a specific version
+  Future<void> _showNotesDialog(BuildContext context, AppLogEntry log) async {
+    final controller = TextEditingController(text: log.notes ?? '');
+    await showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Notes for ${log.versionName}'),
+            content: TextField(
+              controller: controller,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                hintText: 'Enter notes here',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final updatedLog = AppLogEntry(
+                    id: log.id,
+                    packageName: log.packageName,
+                    appName: log.appName,
+                    versionName: log.versionName,
+                    installDate: log.installDate,
+                    updateDate: log.updateDate,
+                    icon: log.icon,
+                    deletionDate: log.deletionDate,
+                    notes: controller.text.isEmpty ? null : controller.text,
+                  );
+                  await widget.dbHelper.insertAppLog(updatedLog);
+                  setState(() {
+                    _appLogsFuture = widget.dbHelper.getAppLogs(
+                      widget.app?.packageName ?? widget.log.packageName,
+                    );
+                  });
+                  Navigator.pop(context);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isInstalled = app != null;
+    final isInstalled = widget.app != null;
     final icon =
-        isInstalled && app is ApplicationWithIcon
-            ? (app as ApplicationWithIcon).icon
-            : log.icon;
-    final appName = isInstalled ? app!.appName : log.appName;
-    final packageName = isInstalled ? app!.packageName : log.packageName;
+        isInstalled && widget.app is ApplicationWithIcon
+            ? (widget.app as ApplicationWithIcon).icon
+            : widget.log.icon;
+    final appName = isInstalled ? widget.app!.appName : widget.log.appName;
+    final packageName =
+        isInstalled ? widget.app!.packageName : widget.log.packageName;
     final versionName =
-        isInstalled ? app!.versionName ?? 'N/A' : log.versionName;
-    final installDate = DateTime.fromMillisecondsSinceEpoch(log.installDate);
-    final updateDate = DateTime.fromMillisecondsSinceEpoch(log.updateDate);
+        isInstalled ? widget.app!.versionName ?? 'N/A' : widget.log.versionName;
+    final installDate = DateTime.fromMillisecondsSinceEpoch(
+      widget.log.installDate,
+    );
+    final updateDate = DateTime.fromMillisecondsSinceEpoch(
+      widget.log.updateDate,
+    );
     final deletionDate =
-        log.deletionDate != null
-            ? DateTime.fromMillisecondsSinceEpoch(log.deletionDate!)
+        widget.log.deletionDate != null
+            ? DateTime.fromMillisecondsSinceEpoch(widget.log.deletionDate!)
             : null;
 
     return Scaffold(
@@ -120,7 +189,7 @@ class AppDetailsPage extends StatelessWidget {
           ),
           Expanded(
             child: FutureBuilder<List<AppLogEntry>>(
-              future: dbHelper.getAppLogs(packageName),
+              future: _appLogsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -146,8 +215,10 @@ class AppDetailsPage extends StatelessWidget {
                     ).format(date);
                     return ListTile(
                       title: Text('Version: ${log.versionName}'),
-                      subtitle: Text('Updated: $formattedDate'),
-                      // Non-clickable, but ListTile for future interactivity
+                      subtitle: Text(
+                        'Updated: $formattedDate${log.notes != null ? '\nNotes: ${log.notes}' : ''}',
+                      ),
+                      onTap: () => _showNotesDialog(context, log),
                     );
                   },
                 );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
+import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../database/app_log_entry.dart';
 
@@ -25,8 +26,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
     try {
       print('Fetching installed apps...'); // Debug log
       final installedApps = await DeviceApps.getInstalledApplications(
-        includeAppIcons:
-            true, // Required for installTimeMillis and updateTimeMillis
+        includeAppIcons: true,
         includeSystemApps: false,
         onlyAppsWithLaunchIntent: true,
       );
@@ -92,11 +92,12 @@ class _InstalledAppsPageState extends State<InstalledAppsPage> {
                     final date = DateTime.fromMillisecondsSinceEpoch(
                       log.updateDate,
                     );
+                    final formattedDate = DateFormat(
+                      'dd/MM/yy HH:mm',
+                    ).format(date);
                     return ListTile(
                       title: Text('Version: ${log.versionName}'),
-                      subtitle: Text(
-                        'Updated: ${date.toString().split('.')[0]}',
-                      ),
+                      subtitle: Text('Updated: $formattedDate'),
                     );
                   },
                 ),

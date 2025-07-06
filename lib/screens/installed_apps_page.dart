@@ -3,6 +3,7 @@ import 'package:device_apps/device_apps.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../database/app_log_entry.dart';
+import 'app_details_page.dart';
 
 class InstalledAppsPage extends StatefulWidget {
   const InstalledAppsPage({super.key});
@@ -125,54 +126,6 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
     }
   }
 
-  void _showVersionHistory(BuildContext context, Application app) async {
-    try {
-      final logs = await dbHelper.getAppLogs(app.packageName);
-      if (!context.mounted) return;
-
-      showDialog(
-        context: context,
-        builder:
-            (context) => AlertDialog(
-              title: Text('${app.appName} Version History'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: logs.length,
-                  itemBuilder: (context, index) {
-                    final log = logs[index];
-                    final date = DateTime.fromMillisecondsSinceEpoch(
-                      log.updateDate,
-                    );
-                    final formattedDate = DateFormat(
-                      'dd/MM/yy HH:mm',
-                    ).format(date);
-                    return ListTile(
-                      title: Text('Version: ${log.versionName}'),
-                      subtitle: Text('Updated: $formattedDate'),
-                    );
-                  },
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ],
-            ),
-      );
-    } catch (e) {
-      print('Error showing version history: $e'); // Debug log
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading version history: $e')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (apps == null && cachedApps == null && errorMessage != null) {
@@ -238,9 +191,33 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
                       'Package: ${app?.packageName ?? log!.packageName}',
                     ),
                     onTap:
-                        app != null
-                            ? () => _showVersionHistory(context, app)
-                            : null,
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => AppDetailsPage(
+                                  app: app,
+                                  log:
+                                      log ??
+                                      AppLogEntry(
+                                        packageName: app!.packageName,
+                                        appName: app.appName,
+                                        versionName: app.versionName ?? 'N/A',
+                                        installDate:
+                                            DateTime.now()
+                                                .millisecondsSinceEpoch,
+                                        updateDate:
+                                            DateTime.now()
+                                                .millisecondsSinceEpoch,
+                                        icon:
+                                            app is ApplicationWithIcon
+                                                ? app.icon
+                                                : null,
+                                      ),
+                                  dbHelper: dbHelper,
+                                ),
+                          ),
+                        ),
                   );
                 },
               ),

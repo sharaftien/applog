@@ -4,7 +4,7 @@ import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 4; // Incremented for icon column
+  static const _databaseVersion = 5; // Incremented for deletion_date column
   static const table = 'app_logs';
 
   static Database? _database;
@@ -31,7 +31,8 @@ class DatabaseHelper {
             version_name TEXT NOT NULL,
             install_date INTEGER NOT NULL,
             update_date INTEGER NOT NULL,
-            icon BLOB
+            icon BLOB,
+            deletion_date INTEGER
           )
         ''');
       },
@@ -42,6 +43,10 @@ class DatabaseHelper {
         if (oldVersion < 4) {
           print('Adding icon column to table: $table'); // Debug log
           await db.execute('ALTER TABLE $table ADD icon BLOB');
+        }
+        if (oldVersion < 5) {
+          print('Adding deletion_date column to table: $table'); // Debug log
+          await db.execute('ALTER TABLE $table ADD deletion_date INTEGER');
         }
         if (oldVersion < 3) {
           print('Dropping and recreating table: $table'); // Debug log
@@ -54,7 +59,8 @@ class DatabaseHelper {
               version_name TEXT NOT NULL,
               install_date INTEGER NOT NULL,
               update_date INTEGER NOT NULL,
-              icon BLOB
+              icon BLOB,
+              deletion_date INTEGER
             )
           ''');
         }
@@ -71,7 +77,7 @@ class DatabaseHelper {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       print(
-        'Inserted: ${entry.appName}, Version: ${entry.versionName}, Install: ${entry.installDate}, Update: ${entry.updateDate}',
+        'Inserted: ${entry.appName}, Version: ${entry.versionName}, Install: ${entry.installDate}, Update: ${entry.updateDate}, Deletion: ${entry.deletionDate ?? 'N/A'}',
       ); // Debug log
     } catch (e) {
       print('Error inserting app log: $e'); // Debug log

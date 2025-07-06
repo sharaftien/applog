@@ -3,6 +3,7 @@ import 'package:device_apps/device_apps.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../database/app_log_entry.dart';
+import 'app_details_page.dart';
 
 class UninstalledAppsPage extends StatefulWidget {
   const UninstalledAppsPage({super.key});
@@ -14,6 +15,7 @@ class UninstalledAppsPage extends StatefulWidget {
 class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     with SingleTickerProviderStateMixin {
   List<AppLogEntry>? uninstalledApps;
+  List<AppLogEntry>? cachedApps;
   final DatabaseHelper dbHelper = DatabaseHelper();
   String? errorMessage;
   bool isRefreshing = false;
@@ -31,6 +33,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
       begin: 0,
       end: 360,
     ).animate(_refreshController);
+    _loadCachedUninstalledApps();
     _fetchUninstalledApps();
   }
 
@@ -38,6 +41,33 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
   void dispose() {
     _refreshController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCachedUninstalledApps() async {
+    try {
+      print('Loading cached uninstalled apps...'); // Debug log
+      final installedApps = await DeviceApps.getInstalledApplications(
+        includeAppIcons: false,
+        includeSystemApps: false,
+        onlyAppsWithLaunchIntent: true,
+      );
+      final installedPackageNames =
+          installedApps.map((app) => app.packageName).toList();
+      final logs = await dbHelper.getUninstalledAppLogs(installedPackageNames);
+      if (mounted) {
+        setState(() {
+          cachedApps = logs;
+          errorMessage = null;
+        });
+      }
+    } catch (e) {
+      print('Error loading cached uninstalled apps: $e'); // Debug log
+      if (mounted) {
+        setState(() {
+          errorMessage = 'Failed to load cached uninstalled apps: $e';
+        });
+      }
+    }
   }
 
   Future<void> _fetchUninstalledApps() async {
@@ -48,24 +78,26 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     try {
       print('Fetching uninstalled apps...'); // Debug log
       final installedApps = await DeviceApps.getInstalledApplications(
-        includeAppIcons: true, // Changed to true to cache icons
+        includeAppIcons: true,
         includeSystemApps: false,
         onlyAppsWithLaunchIntent: true,
       );
       final installedPackageNames =
           installedApps.map((app) => app.packageName).toList();
-      // Cache icons for installed apps to ensure future uninstalled apps have icons
+      final currentTime = DateTime.now().millisecondsSinceEpoch;
+
+      // Update installed apps
       for (var app in installedApps) {
         final existingLogs = await dbHelper.getAppLogs(app.packageName);
         final currentVersion = app.versionName ?? 'N/A';
         final installTime =
             (app is ApplicationWithIcon)
-                ? app.installTimeMillis ?? DateTime.now().millisecondsSinceEpoch
-                : DateTime.now().millisecondsSinceEpoch;
+                ? app.installTimeMillis ?? currentTime
+                : currentTime;
         final updateTime =
             (app is ApplicationWithIcon)
-                ? app.updateTimeMillis ?? DateTime.now().millisecondsSinceEpoch
-                : DateTime.now().millisecondsSinceEpoch;
+                ? app.updateTimeMillis ?? currentTime
+                : currentTime;
         final icon = (app is ApplicationWithIcon) ? app.icon : null;
 
         if (existingLogs.isEmpty ||
@@ -77,16 +109,40 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
             installDate: installTime,
             updateDate: updateTime,
             icon: icon,
+            deletionDate: null, // Explicitly null for installed apps
           );
           await dbHelper.insertAppLog(entry);
         }
       }
-      final logs = await dbHelper.getUninstalledAppLogs(installedPackageNames);
-      print('Fetched ${logs.length} uninstalled app logs'); // Debug log
+
+      // Get uninstalled apps and update deletionDate if not set
+      final uninstalledLogs = await dbHelper.getUninstalledAppLogs(
+        installedPackageNames,
+      );
+      for (var log in uninstalledLogs) {
+        if (log.deletionDate == null) {
+          final updatedLog = AppLogEntry(
+            id: log.id,
+            packageName: log.packageName,
+            appName: log.appName,
+            versionName: log.versionName,
+            installDate: log.installDate,
+            updateDate: log.updateDate,
+            icon: log.icon,
+            deletionDate: currentTime,
+          );
+          await dbHelper.insertAppLog(updatedLog);
+        }
+      }
+
+      print(
+        'Fetched ${uninstalledLogs.length} uninstalled app logs',
+      ); // Debug log
 
       if (mounted) {
         setState(() {
-          uninstalledApps = logs;
+          uninstalledApps = uninstalledLogs;
+          cachedApps = null;
           errorMessage = null;
           isRefreshing = false;
           _refreshController.stop();
@@ -104,44 +160,16 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     }
   }
 
-  void _showVersionHistory(BuildContext context, AppLogEntry log) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('${log.appName} Version History'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  ListTile(
-                    title: Text('Version: ${log.versionName}'),
-                    subtitle: Text(
-                      'Updated: ${DateFormat('dd/MM/yy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(log.updateDate))}',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (uninstalledApps == null && errorMessage != null) {
+    if (uninstalledApps == null && cachedApps == null && errorMessage != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Uninstalled Apps')),
         body: Center(child: Text(errorMessage!)),
       );
     }
+
+    final displayApps = uninstalledApps ?? cachedApps ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -163,14 +191,14 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
         ],
       ),
       body:
-          uninstalledApps == null && isRefreshing
+          displayApps.isEmpty && isRefreshing
               ? const Center(child: CircularProgressIndicator())
-              : uninstalledApps!.isEmpty
+              : displayApps.isEmpty
               ? const Center(child: Text('No uninstalled apps found'))
               : ListView.builder(
-                itemCount: uninstalledApps!.length,
+                itemCount: displayApps.length,
                 itemBuilder: (context, index) {
-                  final log = uninstalledApps![index];
+                  final log = displayApps[index];
                   return ListTile(
                     leading:
                         log.icon != null
@@ -188,7 +216,17 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
                       'Version: ${log.versionName}\n'
                       'Package: ${log.packageName}',
                     ),
-                    onTap: () => _showVersionHistory(context, log),
+                    onTap:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => AppDetailsPage(
+                                  log: log,
+                                  dbHelper: dbHelper,
+                                ),
+                          ),
+                        ),
                   );
                 },
               ),

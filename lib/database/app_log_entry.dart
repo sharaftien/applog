@@ -8,6 +8,8 @@ class AppLogEntry {
   final int installDate; // Unix timestamp in milliseconds (first install)
   final int updateDate; // Unix timestamp in milliseconds (last update)
   final Uint8List? icon; // App icon as byte array
+  final int?
+  deletionDate; // Unix timestamp in milliseconds (when detected uninstalled)
 
   AppLogEntry({
     this.id,
@@ -17,6 +19,7 @@ class AppLogEntry {
     required this.installDate,
     required this.updateDate,
     this.icon,
+    this.deletionDate,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,6 +31,7 @@ class AppLogEntry {
       'install_date': installDate,
       'update_date': updateDate,
       'icon': icon,
+      'deletion_date': deletionDate,
     };
   }
 
@@ -40,6 +44,7 @@ class AppLogEntry {
       installDate: map['install_date'],
       updateDate: map['update_date'],
       icon: map['icon'] as Uint8List?,
+      deletionDate: map['deletion_date'],
     );
   }
 }

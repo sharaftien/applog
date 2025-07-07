@@ -1,4 +1,4 @@
-import 'package:path/path.dart';
+import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 import 'app_log_entry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,10 +17,10 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    final path = join(await getDatabasesPath(), _databaseName);
-    print('Initializing database at: $path');
+    final dbPath = path.join(await getDatabasesPath(), _databaseName);
+    print('Initializing database at: $dbPath');
     return await openDatabase(
-      path,
+      dbPath,
       version: _databaseVersion,
       onCreate: (db, version) async {
         print('Creating table: $table');
@@ -115,7 +115,7 @@ class DatabaseHelper {
       final db = await database;
       final maps = await db.query(
         table,
-        where: 'package_name = ?',
+        where: 'package_name = ? AND deletion_date IS NULL',
         whereArgs: [packageName],
         orderBy: 'id DESC',
       );

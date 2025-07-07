@@ -17,13 +17,13 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     with SingleTickerProviderStateMixin {
   List<AppLogEntry>? uninstalledApps;
   List<AppLogEntry>? cachedApps;
-  List<AppLogEntry> displayApps = []; // Store sorted apps
+  List<AppLogEntry> displayApps = [];
   final DatabaseHelper dbHelper = DatabaseHelper();
   String? errorMessage;
   bool isRefreshing = false;
   late AnimationController _refreshController;
   late Animation<double> _refreshAnimation;
-  String sortBy = 'update_date'; // Default sort to Last Update
+  String sortBy = 'update_date';
 
   @override
   void initState() {
@@ -52,11 +52,9 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
         if (sortBy == 'app_name') {
           return a.appName.compareTo(b.appName);
         } else if (sortBy == 'deletion_date') {
-          return (b.deletionDate ?? 0).compareTo(
-            a.deletionDate ?? 0,
-          ); // Descending
+          return (b.deletionDate ?? 0).compareTo(a.deletionDate ?? 0);
         } else {
-          return b.updateDate.compareTo(a.updateDate); // Descending
+          return b.updateDate.compareTo(a.updateDate);
         }
       });
     });
@@ -64,7 +62,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
 
   Future<void> _loadCachedUninstalledApps() async {
     try {
-      print('Loading cached uninstalled apps...'); // Debug log
+      print('Loading cached uninstalled apps...');
       final installedApps = await DeviceApps.getInstalledApplications(
         includeAppIcons: false,
         includeSystemApps: false,
@@ -85,7 +83,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
         _sortDisplayApps();
       }
     } catch (e) {
-      print('Error loading cached uninstalled apps: $e'); // Debug log
+      print('Error loading cached uninstalled apps: $e');
       if (mounted) {
         setState(() {
           errorMessage = 'Failed to load cached uninstalled apps: $e';
@@ -100,7 +98,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
       _refreshController.repeat();
     });
     try {
-      print('Fetching uninstalled apps...'); // Debug log
+      print('Fetching uninstalled apps...');
       final installedApps = await DeviceApps.getInstalledApplications(
         includeAppIcons: true,
         includeSystemApps: false,
@@ -110,7 +108,6 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
           installedApps.map((app) => app.packageName).toList();
       final currentTime = DateTime.now().millisecondsSinceEpoch;
 
-      // Update installed apps
       for (var app in installedApps) {
         final existingLogs = await dbHelper.getAppLogs(app.packageName);
         final currentVersion = app.versionName ?? 'N/A';
@@ -124,7 +121,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
                 : currentTime;
         final icon = (app is ApplicationWithIcon) ? app.icon : null;
 
-        print('App: ${app.appName}, UpdateTime: $updateTime'); // Debug log
+        print('App: ${app.appName}, UpdateTime: $updateTime');
 
         if (existingLogs.isEmpty ||
             existingLogs.first.versionName != currentVersion) {
@@ -142,7 +139,6 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
         }
       }
 
-      // Get uninstalled apps and update deletionDate if not set
       final uninstalledLogs = await dbHelper.getUninstalledAppLogs(
         installedPackageNames,
         sortBy: sortBy,
@@ -166,7 +162,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
 
       print(
         'Fetched ${uninstalledLogs.length} uninstalled app logs, sorted by $sortBy',
-      ); // Debug log
+      );
 
       if (mounted) {
         setState(() {
@@ -180,7 +176,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
         _sortDisplayApps();
       }
     } catch (e) {
-      print('Error fetching uninstalled apps: $e'); // Debug log
+      print('Error fetching uninstalled apps: $e');
       if (mounted) {
         setState(() {
           errorMessage = 'Failed to load uninstalled apps: $e';
@@ -189,6 +185,20 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
         });
       }
     }
+  }
+
+  String _formatRelativeTime(int timestamp) {
+    final now = DateTime.now();
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final diff = now.difference(date);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60)
+      return '${diff.inMinutes} minute${diff.inMinutes == 1 ? '' : 's'} ago';
+    if (diff.inHours < 24)
+      return '${diff.inHours} hour${diff.inHours == 1 ? '' : 's'} ago';
+    if (diff.inDays < 30)
+      return '${diff.inDays} day${diff.inDays == 1 ? '' : 's'} ago';
+    return DateFormat.yMMMd().format(date);
   }
 
   @override
@@ -264,8 +274,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
                             : const Icon(Icons.delete, size: 40),
                     title: Text(log.appName),
                     subtitle: Text(
-                      'Version: ${log.versionName}\n'
-                      'Package: ${log.packageName}',
+                      'Version: ${log.versionName}\nDeleted ${_formatRelativeTime(log.deletionDate ?? DateTime.now().millisecondsSinceEpoch)}',
                     ),
                     onTap:
                         () => Navigator.push(

@@ -17,13 +17,13 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
     with SingleTickerProviderStateMixin {
   List<Application>? apps;
   List<AppLogEntry>? cachedApps;
-  List<Object> displayApps = []; // Store sorted apps
+  List<Object> displayApps = [];
   final DatabaseHelper dbHelper = DatabaseHelper();
   String? errorMessage;
   bool isRefreshing = false;
   late AnimationController _refreshController;
   late Animation<double> _refreshAnimation;
-  String sortBy = 'update_date'; // Default sort to Last Update
+  String sortBy = 'update_date';
 
   @override
   void initState() {
@@ -67,7 +67,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
         if (sortBy == 'app_name') {
           return aName.compareTo(bName);
         } else {
-          return bUpdate.compareTo(aUpdate); // Descending order
+          return bUpdate.compareTo(aUpdate);
         }
       });
     });
@@ -75,7 +75,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
 
   Future<void> _loadCachedApps() async {
     try {
-      print('Loading cached apps...'); // Debug log
+      print('Loading cached apps...');
       final logs = await dbHelper.getLatestAppLogs(sortBy: sortBy);
       if (mounted) {
         setState(() {
@@ -86,7 +86,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
         _sortDisplayApps();
       }
     } catch (e) {
-      print('Error loading cached apps: $e'); // Debug log
+      print('Error loading cached apps: $e');
       if (mounted) {
         setState(() {
           errorMessage = 'Failed to load cached apps: $e';
@@ -101,7 +101,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
       _refreshController.repeat();
     });
     try {
-      print('Fetching installed apps...'); // Debug log
+      print('Fetching installed apps...');
       final installedApps = await DeviceApps.getInstalledApplications(
         includeAppIcons: true,
         includeSystemApps: false,
@@ -122,7 +122,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
                 : currentTime;
         final icon = (app is ApplicationWithIcon) ? app.icon : null;
 
-        print('App: ${app.appName}, UpdateTime: $updateTime'); // Debug log
+        print('App: ${app.appName}, UpdateTime: $updateTime');
 
         if (existingLogs.isEmpty ||
             existingLogs.first.versionName != currentVersion) {
@@ -141,7 +141,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
       }
 
       final logs = await dbHelper.getLatestAppLogs(sortBy: sortBy);
-      print('Fetched ${installedApps.length} apps'); // Debug log
+      print('Fetched ${installedApps.length} apps');
 
       if (mounted) {
         setState(() {
@@ -155,7 +155,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
         _sortDisplayApps();
       }
     } catch (e) {
-      print('Error fetching apps: $e'); // Debug log
+      print('Error fetching apps: $e');
       if (mounted) {
         setState(() {
           errorMessage = 'Failed to load apps: $e';
@@ -164,6 +164,20 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
         });
       }
     }
+  }
+
+  String _formatRelativeTime(int timestamp) {
+    final now = DateTime.now();
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final diff = now.difference(date);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60)
+      return '${diff.inMinutes} minute${diff.inMinutes == 1 ? '' : 's'} ago';
+    if (diff.inHours < 24)
+      return '${diff.inHours} hour${diff.inHours == 1 ? '' : 's'} ago';
+    if (diff.inDays < 30)
+      return '${diff.inDays} day${diff.inDays == 1 ? '' : 's'} ago';
+    return DateFormat.yMMMd().format(date);
   }
 
   @override
@@ -253,16 +267,16 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
                       isApp
                           ? (app as Application).versionName ?? 'N/A'
                           : (app as AppLogEntry).versionName;
-                  final packageName =
+                  final updateTime =
                       isApp
-                          ? (app as Application).packageName
-                          : (app as AppLogEntry).packageName;
+                          ? (app as Application).updateTimeMillis ?? 0
+                          : (app as AppLogEntry).updateDate;
 
                   return ListTile(
                     leading: icon,
                     title: Text(appName),
                     subtitle: Text(
-                      'Version: $versionName\nPackage: $packageName',
+                      'Version: $versionName\nLast updated ${_formatRelativeTime(updateTime)}',
                     ),
                     onTap:
                         () => Navigator.push(

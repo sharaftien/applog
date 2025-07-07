@@ -5,9 +5,9 @@ import '../database/app_log_entry.dart';
 import '../database/database_helper.dart';
 
 class AppDetailsPage extends StatefulWidget {
-  final Application? app; // Null for uninstalled apps
-  final AppLogEntry log; // Used for uninstalled apps or fallback
-  final DatabaseHelper dbHelper; // Injected for database access
+  final Application? app;
+  final AppLogEntry log;
+  final DatabaseHelper dbHelper;
 
   const AppDetailsPage({
     super.key,
@@ -31,7 +31,6 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
     );
   }
 
-  // Show dialog to add/edit notes for a specific version
   Future<void> _showNotesDialog(BuildContext context, AppLogEntry log) async {
     final controller = TextEditingController(text: log.notes ?? '');
     await showDialog(
@@ -65,7 +64,7 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
                     deletionDate: log.deletionDate,
                     notes: controller.text.isEmpty ? null : controller.text,
                   );
-                  await widget.dbHelper.insertAppLog(updatedLog);
+                  await widget.dbHelper.insertAppLogs([updatedLog]);
                   setState(() {
                     _appLogsFuture = widget.dbHelper.getAppLogs(
                       widget.app?.packageName ?? widget.log.packageName,
@@ -114,7 +113,6 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with icon and title
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -144,7 +142,6 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
               ],
             ),
           ),
-          // Non-scrollable details section (no Card)
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 16.0,
@@ -179,7 +176,6 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
               ],
             ),
           ),
-          // Scrollable version history
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Text(

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
-import 'package:intl/intl.dart';
-import 'dart:typed_data';
-import '../database/database_helper.dart';
 import '../database/app_log_entry.dart';
+import '../database/database_helper.dart';
 import 'app_details_page.dart';
+import '../main.dart';
+import 'package:intl/intl.dart';
 
 class UninstalledAppsPage extends StatefulWidget {
   const UninstalledAppsPage({super.key});
@@ -15,49 +15,50 @@ class UninstalledAppsPage extends StatefulWidget {
 
 class _UninstalledAppsPageState extends State<UninstalledAppsPage>
     with SingleTickerProviderStateMixin {
-  List<AppLogEntry>? uninstalledApps;
   List<AppLogEntry>? cachedApps;
   List<AppLogEntry> displayApps = [];
   final DatabaseHelper dbHelper = DatabaseHelper();
   String? errorMessage;
   bool isRefreshing = false;
-  late AnimationController _refreshController;
-  late Animation<double> _refreshAnimation;
-  String sortBy = 'update_date';
+  String sortBy = 'deletion_date';
+  AnimationController? _controller;
 
   @override
   void initState() {
     super.initState();
-    _refreshController = AnimationController(
-      vsync: this,
+    _controller = AnimationController(
       duration: const Duration(seconds: 1),
-    );
-    _refreshAnimation = Tween<double>(
-      begin: 0,
-      end: 360,
-    ).animate(_refreshController);
+      vsync: this,
+    )..addListener(() {
+      setState(() {});
+    });
     _loadCachedUninstalledApps();
-    _fetchUninstalledApps();
+    AppStateManager().addListener(_onAppStateUpdate);
+    if (AppStateManager().isFetching) {
+      setState(() {
+        isRefreshing = true;
+        _controller?.repeat();
+      });
+    }
   }
 
   @override
   void dispose() {
-    _refreshController.dispose();
+    AppStateManager().removeListener(_onAppStateUpdate);
+    _controller?.dispose();
     super.dispose();
   }
 
-  void _sortDisplayApps() {
+  Future<void> _onAppStateUpdate() async {
     setState(() {
-      displayApps.sort((a, b) {
-        if (sortBy == 'app_name') {
-          return a.appName.compareTo(b.appName);
-        } else if (sortBy == 'deletion_date') {
-          return (b.deletionDate ?? 0).compareTo(a.deletionDate ?? 0);
-        } else {
-          return b.updateDate.compareTo(a.updateDate);
-        }
-      });
+      isRefreshing = AppStateManager().isFetching;
+      if (isRefreshing) {
+        _controller?.repeat();
+      } else {
+        _controller?.stop();
+      }
     });
+    await _loadCachedUninstalledApps();
   }
 
   Future<void> _loadCachedUninstalledApps() async {
@@ -80,14 +81,13 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
           displayApps = logs;
           errorMessage = null;
         });
-        _sortDisplayApps();
       }
     } catch (e) {
       print('Error loading cached uninstalled apps: $e');
       if (mounted) {
-        setState(() {
-          errorMessage = 'Failed to load cached uninstalled apps: $e';
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load uninstalled apps: $e')),
+        );
       }
     }
   }
@@ -95,96 +95,57 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
   Future<void> _fetchUninstalledApps() async {
     setState(() {
       isRefreshing = true;
-      _refreshController.repeat();
+      _controller?.repeat();
     });
     try {
-      print('Fetching uninstalled apps...');
+      await AppStateManager().fetchAndUpdateApps();
       final installedApps = await DeviceApps.getInstalledApplications(
-        includeAppIcons: true,
+        includeAppIcons: false,
         includeSystemApps: false,
         onlyAppsWithLaunchIntent: true,
       );
       final installedPackageNames =
           installedApps.map((app) => app.packageName).toList();
-      final currentTime = DateTime.now().millisecondsSinceEpoch;
-
-      for (var app in installedApps) {
-        final existingLogs = await dbHelper.getAppLogs(app.packageName);
-        final currentVersion = app.versionName ?? 'N/A';
-        final installTime =
-            (app is ApplicationWithIcon)
-                ? app.installTimeMillis ?? currentTime
-                : currentTime;
-        final updateTime =
-            (app is ApplicationWithIcon)
-                ? app.updateTimeMillis ?? currentTime
-                : currentTime;
-        final icon = (app is ApplicationWithIcon) ? app.icon : null;
-
-        print('App: ${app.appName}, UpdateTime: $updateTime');
-
-        if (existingLogs.isEmpty ||
-            existingLogs.first.versionName != currentVersion) {
-          final entry = AppLogEntry(
-            packageName: app.packageName,
-            appName: app.appName,
-            versionName: currentVersion,
-            installDate: installTime,
-            updateDate: updateTime,
-            icon: icon,
-            deletionDate: null,
-            notes: existingLogs.isNotEmpty ? existingLogs.first.notes : null,
-          );
-          await dbHelper.insertAppLog(entry);
-        }
-      }
-
-      final uninstalledLogs = await dbHelper.getUninstalledAppLogs(
+      final updatedLogs = await dbHelper.getUninstalledAppLogs(
         installedPackageNames,
         sortBy: sortBy,
       );
-      for (var log in uninstalledLogs) {
-        if (log.deletionDate == null) {
-          final updatedLog = AppLogEntry(
-            id: log.id,
-            packageName: log.packageName,
-            appName: log.appName,
-            versionName: log.versionName,
-            installDate: log.installDate,
-            updateDate: log.updateDate,
-            icon: log.icon,
-            deletionDate: currentTime,
-            notes: log.notes,
-          );
-          await dbHelper.insertAppLog(updatedLog);
-        }
-      }
-
-      print(
-        'Fetched ${uninstalledLogs.length} uninstalled app logs, sorted by $sortBy',
-      );
-
       if (mounted) {
         setState(() {
-          uninstalledApps = uninstalledLogs;
-          cachedApps = null;
-          displayApps = uninstalledLogs;
+          cachedApps = updatedLogs;
+          displayApps = updatedLogs;
           errorMessage = null;
           isRefreshing = false;
-          _refreshController.stop();
+          _controller?.stop();
         });
-        _sortDisplayApps();
       }
     } catch (e) {
       print('Error fetching uninstalled apps: $e');
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load uninstalled apps: $e')),
+        );
         setState(() {
-          errorMessage = 'Failed to load uninstalled apps: $e';
           isRefreshing = false;
-          _refreshController.stop();
+          _controller?.stop();
         });
       }
     }
+  }
+
+  void _sortDisplayApps() {
+    setState(() {
+      displayApps = List.from(cachedApps ?? []);
+      displayApps.sort((a, b) {
+        if (sortBy == 'app_name') {
+          return a.appName.compareTo(b.appName);
+        } else if (sortBy == 'deletion_date') {
+          return (b.deletionDate ?? 0).compareTo(a.deletionDate ?? 0);
+        } else {
+          return b.updateDate.compareTo(a.updateDate);
+        }
+      });
+    });
   }
 
   String _formatRelativeTime(int timestamp) {
@@ -203,92 +164,96 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
 
   @override
   Widget build(BuildContext context) {
-    if (displayApps.isEmpty && errorMessage != null) {
-      return Center(child: Text(errorMessage!));
-    }
-
-    return Column(
+    return Stack(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        Column(
           children: [
-            DropdownButton<String>(
-              value: sortBy,
-              items: const [
-                DropdownMenuItem(value: 'app_name', child: Text('Name')),
-                DropdownMenuItem(
-                  value: 'update_date',
-                  child: Text('Last Update'),
-                ),
-                DropdownMenuItem(
-                  value: 'deletion_date',
-                  child: Text('Deletion Date'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                DropdownButton<String>(
+                  value: sortBy,
+                  items: const [
+                    DropdownMenuItem(value: 'app_name', child: Text('Name')),
+                    DropdownMenuItem(
+                      value: 'update_date',
+                      child: Text('Last Update'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'deletion_date',
+                      child: Text('Deletion Date'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null && value != sortBy) {
+                      setState(() {
+                        sortBy = value;
+                      });
+                      _sortDisplayApps();
+                    }
+                  },
                 ),
               ],
-              onChanged: (value) {
-                if (value != null && value != sortBy) {
-                  setState(() {
-                    sortBy = value;
-                  });
-                  _sortDisplayApps();
-                }
-              },
             ),
-            IconButton(
-              icon: AnimatedBuilder(
-                animation: _refreshAnimation,
-                builder:
-                    (context, child) => Transform.rotate(
-                      angle: _refreshAnimation.value * 3.14159 / 180,
-                      child: Icon(
-                        isRefreshing ? Icons.refresh : Icons.refresh_outlined,
+            Expanded(
+              child:
+                  cachedApps == null && errorMessage != null
+                      ? Center(child: Text(errorMessage!))
+                      : cachedApps == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : cachedApps!.isEmpty
+                      ? const Center(child: Text('No uninstalled apps found'))
+                      : ListView.builder(
+                        itemCount: displayApps.length,
+                        itemBuilder: (context, index) {
+                          final log = displayApps[index];
+                          return ListTile(
+                            leading:
+                                log.icon != null
+                                    ? Image.memory(
+                                      log.icon!,
+                                      width: 40,
+                                      height: 40,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              const Icon(
+                                                Icons.delete,
+                                                size: 40,
+                                              ),
+                                    )
+                                    : const Icon(Icons.delete, size: 40),
+                            title: Text(log.appName),
+                            subtitle: Text(
+                              'Version: ${log.versionName}\nDeleted ${_formatRelativeTime(log.deletionDate ?? DateTime.now().millisecondsSinceEpoch)}',
+                            ),
+                            onTap:
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => AppDetailsPage(
+                                          log: log,
+                                          dbHelper: dbHelper,
+                                        ),
+                                  ),
+                                ),
+                          );
+                        },
                       ),
-                    ),
-              ),
-              onPressed: isRefreshing ? null : _fetchUninstalledApps,
             ),
           ],
         ),
-        Expanded(
-          child:
-              displayApps.isEmpty && isRefreshing
-                  ? const Center(child: CircularProgressIndicator())
-                  : displayApps.isEmpty
-                  ? const Center(child: Text('No uninstalled apps found'))
-                  : ListView.builder(
-                    itemCount: displayApps.length,
-                    itemBuilder: (context, index) {
-                      final log = displayApps[index];
-                      return ListTile(
-                        leading:
-                            log.icon != null
-                                ? Image.memory(
-                                  log.icon!,
-                                  width: 40,
-                                  height: 40,
-                                  errorBuilder:
-                                      (context, error, stackTrace) =>
-                                          const Icon(Icons.delete, size: 40),
-                                )
-                                : const Icon(Icons.delete, size: 40),
-                        title: Text(log.appName),
-                        subtitle: Text(
-                          'Version: ${log.versionName}\nDeleted ${_formatRelativeTime(log.deletionDate ?? DateTime.now().millisecondsSinceEpoch)}',
-                        ),
-                        onTap:
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => AppDetailsPage(
-                                      log: log,
-                                      dbHelper: dbHelper,
-                                    ),
-                              ),
-                            ),
-                      );
-                    },
-                  ),
+        Positioned(
+          bottom: 16,
+          right: 16,
+          child: FloatingActionButton(
+            onPressed: isRefreshing ? null : _fetchUninstalledApps,
+            backgroundColor: isRefreshing ? Colors.blue.shade300 : Colors.blue,
+            child: RotationTransition(
+              turns: Tween(begin: 0.0, end: 1.0).animate(_controller!),
+              child: const Icon(Icons.refresh, color: Colors.white),
+            ),
+          ),
         ),
       ],
     );

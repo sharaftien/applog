@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 7;
+  static const _databaseVersion = 8;
   static const table = 'app_logs';
 
   static Database? _database;
@@ -34,7 +34,8 @@ class DatabaseHelper {
             update_date INTEGER NOT NULL,
             icon BLOB,
             deletion_date INTEGER,
-            notes TEXT
+            notes TEXT,
+            is_favorite INTEGER DEFAULT 0
           )
         ''');
         await db.execute(
@@ -55,6 +56,11 @@ class DatabaseHelper {
         if (oldVersion < 7) {
           await db.execute(
             'CREATE INDEX idx_package_name ON $table(package_name)',
+          );
+        }
+        if (oldVersion < 8) {
+          await db.execute(
+            'ALTER TABLE $table ADD is_favorite INTEGER DEFAULT 0',
           );
         }
       },
@@ -82,7 +88,7 @@ class DatabaseHelper {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
         print(
-          'Inserted: ${entry.appName}, Version: ${entry.versionName}, Install: ${entry.installDate}, Update: ${entry.updateDate}, Deletion: ${entry.deletionDate ?? 'N/A'}, Notes: ${entry.notes ?? 'N/A'}',
+          'Inserted: ${entry.appName}, Version: ${entry.versionName}, Install: ${entry.installDate}, Update: ${entry.updateDate}, Deletion: ${entry.deletionDate ?? 'N/A'}, Notes: ${entry.notes ?? 'N/A'}, Favorite: ${entry.isFavorite}',
         );
       }
       await batch.commit();
@@ -97,12 +103,12 @@ class DatabaseHelper {
       final db = await database;
       await db.update(
         table,
-        {'notes': entry.notes},
+        {'notes': entry.notes, 'is_favorite': entry.isFavorite ? 1 : 0},
         where: 'id = ?',
         whereArgs: [entry.id],
       );
       print(
-        'Updated notes for ${entry.appName}, Version: ${entry.versionName}, ID: ${entry.id}',
+        'Updated notes and favorite for ${entry.appName}, Version: ${entry.versionName}, ID: ${entry.id}, Favorite: ${entry.isFavorite}',
       );
     } catch (e) {
       print('Error updating app log: $e');

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
-import 'package:path/path.dart' as path;
-import 'package:sqflite/sqflite.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'database/app_log_entry.dart';
 import 'database/database_helper.dart';
+import 'database/app_log_entry.dart';
 import 'screens/history_page.dart';
 import 'screens/installed_apps_page.dart';
 import 'screens/uninstalled_apps_page.dart';
@@ -89,6 +87,7 @@ class AppStateManager {
               icon: icon,
               deletionDate: null,
               notes: null,
+              isFavorite: false,
             ),
           );
         } else if (latestLog!.versionName != currentVersion ||
@@ -99,12 +98,12 @@ class AppStateManager {
               packageName: app.packageName,
               appName: app.appName,
               versionName: currentVersion,
-              installDate:
-                  latestLog.installDate, // Retain original install date
+              installDate: latestLog.installDate,
               updateDate: updateTime,
               icon: icon,
               deletionDate: null,
               notes: latestLog.notes,
+              isFavorite: latestLog.isFavorite,
             ),
           );
         }
@@ -127,6 +126,7 @@ class AppStateManager {
               icon: latestLog.icon,
               deletionDate: currentTime,
               notes: latestLog.notes,
+              isFavorite: latestLog.isFavorite,
             ),
           );
         }
@@ -153,7 +153,37 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'AppLog',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        primaryColor: Colors.grey[800]!,
+        colorScheme: ColorScheme.dark(
+          primary: Colors.grey[800]!,
+          onPrimary: Colors.white,
+          surface: Colors.black,
+          onSurface: Colors.white,
+        ),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white70),
+          titleLarge: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        cardTheme: CardTheme(
+          color: Colors.grey[900],
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.grey[800],
+          foregroundColor: Colors.white,
+        ),
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          backgroundColor: Colors.grey[800],
+          foregroundColor: Colors.white,
+        ),
+      ),
       home: const MainPage(),
     );
   }
@@ -262,7 +292,7 @@ class _MainPageState extends State<MainPage>
               child: FloatingActionButton(
                 onPressed: isRefreshing ? null : _fetchApps,
                 backgroundColor:
-                    isRefreshing ? Colors.blue.shade300 : Colors.blue,
+                    isRefreshing ? Colors.grey[600] : Colors.grey[800],
                 child: RotationTransition(
                   turns: Tween(begin: 0.0, end: 1.0).animate(_controller!),
                   child: const Icon(Icons.refresh, color: Colors.white),

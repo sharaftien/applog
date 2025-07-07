@@ -5,6 +5,7 @@ import '../database/database_helper.dart';
 import 'app_details_page.dart';
 import '../main.dart';
 import 'package:device_apps/device_apps.dart';
+import 'dart:typed_data';
 
 class UninstalledAppsPage extends StatefulWidget {
   const UninstalledAppsPage({super.key});
@@ -102,32 +103,37 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            DropdownButton<String>(
-              value: sortBy,
-              items: const [
-                DropdownMenuItem(value: 'app_name', child: Text('Name')),
-                DropdownMenuItem(
-                  value: 'update_date',
-                  child: Text('Last Update'),
-                ),
-                DropdownMenuItem(
-                  value: 'deletion_date',
-                  child: Text('Deletion Date'),
-                ),
-              ],
-              onChanged: (value) {
-                if (value != null && value != sortBy) {
-                  setState(() {
-                    sortBy = value;
-                  });
-                  _sortDisplayApps();
-                }
-              },
-            ),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              DropdownButton<String>(
+                value: sortBy,
+                dropdownColor: Colors.grey[900],
+                style: const TextStyle(color: Colors.white),
+                items: const [
+                  DropdownMenuItem(value: 'app_name', child: Text('Name')),
+                  DropdownMenuItem(
+                    value: 'update_date',
+                    child: Text('Last Update'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'deletion_date',
+                    child: Text('Deletion Date'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null && value != sortBy) {
+                    setState(() {
+                      sortBy = value;
+                    });
+                    _sortDisplayApps();
+                  }
+                },
+              ),
+            ],
+          ),
         ),
         Expanded(
           child:
@@ -141,22 +147,7 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
                     itemCount: displayApps.length,
                     itemBuilder: (context, index) {
                       final log = displayApps[index];
-                      return ListTile(
-                        leading:
-                            log.icon != null
-                                ? Image.memory(
-                                  log.icon!,
-                                  width: 40,
-                                  height: 40,
-                                  errorBuilder:
-                                      (context, error, stackTrace) =>
-                                          const Icon(Icons.delete, size: 40),
-                                )
-                                : const Icon(Icons.delete, size: 40),
-                        title: Text(log.appName),
-                        subtitle: Text(
-                          'Version: ${log.versionName}\nDeleted ${_formatRelativeTime(log.deletionDate ?? DateTime.now().millisecondsSinceEpoch)}',
-                        ),
+                      return InkWell(
                         onTap:
                             () => Navigator.push(
                               context,
@@ -168,6 +159,100 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
                                     ),
                               ),
                             ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 8.0,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              log.icon != null
+                                  ? Image.memory(
+                                    Uint8List.fromList(log.icon!),
+                                    width: 40,
+                                    height: 40,
+                                    errorBuilder:
+                                        (context, error, stackTrace) => Icon(
+                                          Icons.delete,
+                                          size: 40,
+                                          color: Colors.grey[600],
+                                        ),
+                                  )
+                                  : Icon(
+                                    Icons.delete,
+                                    size: 40,
+                                    color: Colors.grey[600],
+                                  ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          log.appName,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        if (log.isFavorite)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              left: 4.0,
+                                            ),
+                                            child: Icon(
+                                              Icons.star,
+                                              size: 16,
+                                              color: Colors.yellow[700],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.delete,
+                                              size: 16,
+                                              color: Colors.red[700],
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              log.versionName,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Text(
+                                          _formatRelativeTime(
+                                            log.deletionDate ??
+                                                DateTime.now()
+                                                    .millisecondsSinceEpoch,
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   ),

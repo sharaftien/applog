@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:device_apps/device_apps.dart';
+import 'dart:typed_data';
 import '../database/app_log_entry.dart';
 import '../database/database_helper.dart';
-import 'app_details_page.dart';
 import '../main.dart';
+import 'app_details_page.dart';
 
 class InstalledAppsPage extends StatefulWidget {
   const InstalledAppsPage({super.key});
@@ -18,6 +20,8 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
   List<AppLogEntry> displayApps = [];
   final DatabaseHelper dbHelper = DatabaseHelper();
   String? errorMessage;
+  String sortBy = 'update_date';
+  bool filterFavorites = false;
 
   @override
   void initState() {
@@ -43,10 +47,9 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
       if (mounted) {
         setState(() {
           cachedApps = logs;
-          displayApps = logs.where((log) => log.deletionDate == null).toList();
+          _filterApps();
           errorMessage = null;
         });
-        _sortDisplayApps();
       }
     } catch (e) {
       print('Error loading cached apps: $e');
@@ -56,6 +59,20 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
         );
       }
     }
+  }
+
+  void _filterApps() {
+    setState(() {
+      displayApps =
+          cachedApps!
+              .where(
+                (log) =>
+                    log.deletionDate == null &&
+                    (!filterFavorites || log.isFavorite),
+              )
+              .toList();
+      _sortDisplayApps();
+    });
   }
 
   void _sortDisplayApps() {
@@ -84,8 +101,6 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
     return DateFormat.yMMMd().format(date);
   }
 
-  String sortBy = 'update_date';
-
   @override
   Widget build(BuildContext context) {
     if (displayApps.isEmpty && errorMessage != null) {
@@ -94,28 +109,47 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
 
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            DropdownButton<String>(
-              value: sortBy,
-              items: const [
-                DropdownMenuItem(value: 'app_name', child: Text('Name')),
-                DropdownMenuItem(
-                  value: 'update_date',
-                  child: Text('Last Update'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              DropdownButton<String>(
+                value: sortBy,
+                dropdownColor: Colors.grey[900],
+                style: const TextStyle(color: Colors.white),
+                items: const [
+                  DropdownMenuItem(value: 'app_name', child: Text('Name')),
+                  DropdownMenuItem(
+                    value: 'update_date',
+                    child: Text('Last Update'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null && value != sortBy) {
+                    setState(() {
+                      sortBy = value;
+                    });
+                    _filterApps();
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(
+                  filterFavorites ? Icons.star : Icons.star_border,
+                  color:
+                      filterFavorites ? Colors.yellow[700] : Colors.grey[600],
                 ),
-              ],
-              onChanged: (value) {
-                if (value != null && value != sortBy) {
+                onPressed: () {
                   setState(() {
-                    sortBy = value;
+                    filterFavorites = !filterFavorites;
                   });
-                  _sortDisplayApps();
-                }
-              },
-            ),
-          ],
+                  _filterApps();
+                },
+              ),
+            ],
+          ),
         ),
         Expanded(
           child:
@@ -125,22 +159,7 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
                     itemCount: displayApps.length,
                     itemBuilder: (context, index) {
                       final log = displayApps[index];
-                      return ListTile(
-                        leading:
-                            log.icon != null
-                                ? Image.memory(
-                                  log.icon!,
-                                  width: 40,
-                                  height: 40,
-                                  errorBuilder:
-                                      (context, error, stackTrace) =>
-                                          const Icon(Icons.apps, size: 40),
-                                )
-                                : const Icon(Icons.apps, size: 40),
-                        title: Text(log.appName),
-                        subtitle: Text(
-                          'Version: ${log.versionName}\nLast updated ${_formatRelativeTime(log.updateDate)}',
-                        ),
+                      return InkWell(
                         onTap:
                             () => Navigator.push(
                               context,
@@ -152,6 +171,96 @@ class _InstalledAppsPageState extends State<InstalledAppsPage>
                                     ),
                               ),
                             ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 8.0,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              log.icon != null
+                                  ? Image.memory(
+                                    Uint8List.fromList(log.icon!),
+                                    width: 40,
+                                    height: 40,
+                                    errorBuilder:
+                                        (context, error, stackTrace) => Icon(
+                                          Icons.apps,
+                                          size: 40,
+                                          color: Colors.grey[600],
+                                        ),
+                                  )
+                                  : Icon(
+                                    Icons.apps,
+                                    size: 40,
+                                    color: Colors.grey[600],
+                                  ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          log.appName,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        if (log.isFavorite)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              left: 4.0,
+                                            ),
+                                            child: Icon(
+                                              Icons.star,
+                                              size: 16,
+                                              color: Colors.yellow[700],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.add_circle,
+                                              size: 16,
+                                              color: Colors.green[700],
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              log.versionName,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Text(
+                                          _formatRelativeTime(log.updateDate),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   ),

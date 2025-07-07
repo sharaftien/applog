@@ -1,16 +1,16 @@
-import 'package:flutter/services.dart'; // For Uint8List
+import 'package:flutter/material.dart';
 
 class AppLogEntry {
   final int? id;
   final String packageName;
   final String appName;
   final String versionName;
-  final int installDate; // Unix timestamp in milliseconds (first install)
-  final int updateDate; // Unix timestamp in milliseconds (last update)
-  final Uint8List? icon; // App icon as byte array
-  final int?
-  deletionDate; // Unix timestamp in milliseconds (when detected uninstalled)
-  final String? notes; // User notes for this app version
+  final int installDate;
+  final int updateDate;
+  final List<int>? icon;
+  final int? deletionDate;
+  final String? notes;
+  final bool isFavorite;
 
   AppLogEntry({
     this.id,
@@ -22,6 +22,7 @@ class AppLogEntry {
     this.icon,
     this.deletionDate,
     this.notes,
+    this.isFavorite = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -35,20 +36,22 @@ class AppLogEntry {
       'icon': icon,
       'deletion_date': deletionDate,
       'notes': notes,
+      'is_favorite': isFavorite ? 1 : 0,
     };
   }
 
   factory AppLogEntry.fromMap(Map<String, dynamic> map) {
     return AppLogEntry(
-      id: map['id'],
-      packageName: map['package_name'],
-      appName: map['app_name'],
-      versionName: map['version_name'],
-      installDate: map['install_date'],
-      updateDate: map['update_date'],
-      icon: map['icon'] as Uint8List?,
-      deletionDate: map['deletion_date'],
-      notes: map['notes'],
+      id: map['id'] as int?,
+      packageName: map['package_name'] as String,
+      appName: map['app_name'] as String,
+      versionName: map['version_name'] as String,
+      installDate: map['install_date'] as int,
+      updateDate: map['update_date'] as int,
+      icon: map['icon'] != null ? List<int>.from(map['icon']) : null,
+      deletionDate: map['deletion_date'] as int?,
+      notes: map['notes'] as String?,
+      isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
     );
   }
 }

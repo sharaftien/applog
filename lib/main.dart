@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'database/app_log_entry.dart'; // Added missing import
 import 'database/database_helper.dart';
-import 'database/app_log_entry.dart';
 import 'screens/history_page.dart';
 import 'screens/installed_apps_page.dart';
 import 'screens/uninstalled_apps_page.dart';
@@ -11,35 +11,20 @@ void main() {
   runApp(const MyApp());
 }
 
-class AppStateManager {
+class AppStateManager extends ChangeNotifier {
   static final AppStateManager _instance = AppStateManager._internal();
   factory AppStateManager() => _instance;
   AppStateManager._internal();
 
   final DatabaseHelper _dbHelper = DatabaseHelper();
   bool _isFetching = false;
-  final List<Function> _listeners = [];
 
   bool get isFetching => _isFetching;
-
-  void addListener(Function callback) {
-    _listeners.add(callback);
-  }
-
-  void removeListener(Function callback) {
-    _listeners.remove(callback);
-  }
-
-  void _notifyListeners() {
-    for (var listener in _listeners) {
-      listener();
-    }
-  }
 
   Future<void> fetchAndUpdateApps({bool isInitialLaunch = false}) async {
     if (_isFetching) return;
     _isFetching = true;
-    _notifyListeners();
+    notifyListeners();
     try {
       print('Fetching apps for global update...');
       final installedApps = await DeviceApps.getInstalledApplications(
@@ -77,12 +62,12 @@ class AppStateManager {
                 : null;
 
         if (isFirstLaunch || existingLogs.isEmpty) {
-          // New installation
           newEntries.add(
             AppLogEntry(
               packageName: app.packageName,
               appName: app.appName,
               versionName: currentVersion,
+              installVersionName: currentVersion,
               installDate: installTime,
               updateDate: installTime,
               icon: icon,
@@ -93,12 +78,12 @@ class AppStateManager {
           );
         } else if (latestLog!.versionName != currentVersion ||
             latestLog.updateDate != updateTime) {
-          // Update detected
           newEntries.add(
             AppLogEntry(
               packageName: app.packageName,
               appName: app.appName,
               versionName: currentVersion,
+              installVersionName: latestLog.installVersionName,
               installDate: latestLog.installDate,
               updateDate: updateTime,
               icon: icon,
@@ -122,6 +107,7 @@ class AppStateManager {
               packageName: log.key,
               appName: latestLog.appName,
               versionName: latestLog.versionName,
+              installVersionName: latestLog.installVersionName,
               installDate: latestLog.installDate,
               updateDate: latestLog.updateDate,
               icon: latestLog.icon,
@@ -137,69 +123,12 @@ class AppStateManager {
         await _dbHelper.insertAppLogs(newEntries);
       }
       await _dbHelper.setLastSyncTime(currentTime);
-
-      // Perform a second fetch for initial launch to ensure updates are captured
-      if (isFirstLaunch) {
-        print('Performing second fetch for initial launch...');
-        final secondInstalledApps = await DeviceApps.getInstalledApplications(
-          includeAppIcons: true,
-          includeSystemApps: false,
-          onlyAppsWithLaunchIntent: true,
-        );
-        final secondInstalledPackageNames =
-            secondInstalledApps.map((app) => app.packageName).toList();
-        final secondAllLogs = await _dbHelper.getAllAppLogs();
-        final secondExistingMap = <String, List<AppLogEntry>>{};
-        for (var log in secondAllLogs) {
-          final entry = AppLogEntry.fromMap(log);
-          secondExistingMap.putIfAbsent(entry.packageName, () => []).add(entry);
-        }
-        final secondNewEntries = <AppLogEntry>[];
-
-        for (var app in secondInstalledApps) {
-          final currentVersion = app.versionName ?? 'N/A';
-          final installTime = app.installTimeMillis ?? currentTime;
-          final updateTime = app.updateTimeMillis ?? currentTime;
-          final icon = app is ApplicationWithIcon ? app.icon : null;
-
-          final existingLogs = secondExistingMap[app.packageName] ?? [];
-          final latestLog =
-              existingLogs.isNotEmpty
-                  ? existingLogs.reduce(
-                    (a, b) => (a.id ?? 0) > (b.id ?? 0) ? a : b,
-                  )
-                  : null;
-
-          if (existingLogs.isNotEmpty &&
-              (latestLog!.versionName != currentVersion ||
-                  latestLog.updateDate != updateTime)) {
-            secondNewEntries.add(
-              AppLogEntry(
-                packageName: app.packageName,
-                appName: app.appName,
-                versionName: currentVersion,
-                installDate: latestLog.installDate,
-                updateDate: updateTime,
-                icon: icon,
-                deletionDate: null,
-                notes: latestLog.notes,
-                isFavorite: latestLog.isFavorite,
-              ),
-            );
-          }
-        }
-
-        if (secondNewEntries.isNotEmpty) {
-          await _dbHelper.insertAppLogs(secondNewEntries);
-        }
-        await _dbHelper.setLastSyncTime(currentTime);
-      }
     } catch (e) {
       print('Error fetching apps: $e');
       rethrow;
     } finally {
       _isFetching = false;
-      _notifyListeners();
+      notifyListeners();
     }
   }
 }
@@ -240,8 +169,8 @@ class MyApp extends StatelessWidget {
         tabBarTheme: TabBarTheme(
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white, // Keep tab indicator
-          dividerColor: Colors.transparent, // Remove divider line across screen
+          indicatorColor: Colors.white,
+          dividerColor: Colors.transparent,
           labelStyle: TextStyle(fontWeight: FontWeight.bold),
           unselectedLabelStyle: TextStyle(fontWeight: FontWeight.normal),
         ),
@@ -250,7 +179,7 @@ class MyApp extends StatelessWidget {
           foregroundColor: Colors.white,
         ),
       ),
-      home: MainPage(),
+      home: const MainPage(),
     );
   }
 }
@@ -355,9 +284,9 @@ class _MainPageState extends State<MainPage>
           title: const Text('App Log'),
           titleSpacing: 16.0,
           toolbarHeight: 48.0,
-          bottom: TabBar(
-            padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-            tabs: const [
+          bottom: const TabBar(
+            padding: EdgeInsets.only(top: 4.0, bottom: 4.0),
+            tabs: [
               Tab(text: 'History'),
               Tab(text: 'Installed'),
               Tab(text: 'Uninstalled'),

@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:device_apps/device_apps.dart';
 import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:device_apps/device_apps.dart';
+import 'package:intl/intl.dart';
 import '../database/app_log_entry.dart';
 import '../database/database_helper.dart';
+import '../main.dart';
 
 class AppDetailsPage extends StatefulWidget {
   final Application? app;
@@ -39,13 +40,15 @@ class _AppDetailsPageState extends State<AppDetailsPage>
       widget.app?.packageName ?? widget.log.packageName,
     );
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
     _highlightAnimation = ColorTween(
-      begin: Colors.grey[700],
+      begin: Colors.grey[700]!.withOpacity(0.2),
       end: Colors.transparent,
-    ).animate(_animationController!);
+    ).animate(
+      CurvedAnimation(parent: _animationController!, curve: Curves.easeOut),
+    );
     if (widget.selectedLogId != null) {
       _highlightedLogId = widget.selectedLogId;
       _animationController?.forward().then((_) {
@@ -99,6 +102,7 @@ class _AppDetailsPageState extends State<AppDetailsPage>
                     packageName: log.packageName,
                     appName: log.appName,
                     versionName: log.versionName,
+                    installVersionName: log.installVersionName,
                     installDate: log.installDate,
                     updateDate: log.updateDate,
                     icon: log.icon,
@@ -133,6 +137,7 @@ class _AppDetailsPageState extends State<AppDetailsPage>
       packageName: log.packageName,
       appName: log.appName,
       versionName: log.versionName,
+      installVersionName: log.installVersionName,
       installDate: log.installDate,
       updateDate: log.updateDate,
       icon: log.icon,
@@ -146,28 +151,29 @@ class _AppDetailsPageState extends State<AppDetailsPage>
         widget.app?.packageName ?? widget.log.packageName,
       );
     });
+    AppStateManager().notifyListeners();
   }
 
   void _highlightAndScrollToLog(int logId, List<AppLogEntry> logs) {
     setState(() {
       _highlightedLogId = logId;
+      _animationController?.reset();
+      _animationController?.forward().then((_) {
+        if (mounted) {
+          setState(() {
+            _highlightedLogId = null;
+          });
+        }
+      });
     });
     _scrollToSelectedLog(logId);
-    _animationController?.reset();
-    _animationController?.forward().then((_) {
-      if (mounted) {
-        setState(() {
-          _highlightedLogId = null;
-        });
-      }
-    });
   }
 
   void _scrollToSelectedLog(int logId) {
     _appLogsFuture.then((logs) {
       final index = logs.indexWhere((log) => log.id == logId);
       if (index != -1 && _scrollController.hasClients) {
-        final offset = index * 80.0; // Approximate height per item
+        final offset = index * 80.0;
         _scrollController.animateTo(
           offset,
           duration: const Duration(milliseconds: 300),
@@ -193,9 +199,19 @@ class _AppDetailsPageState extends State<AppDetailsPage>
     );
     if (latestPrevious.deletionDate != null) return 'installed';
     return log.updateDate > log.installDate &&
-            log.updateDate > latestPrevious.updateDate
+            log.updateDate > (latestPrevious.updateDate ?? 0)
         ? 'updated'
         : 'installed';
+  }
+
+  String _getVersionForEvent(AppLogEntry log, String eventType) {
+    if (eventType == 'installed') return log.installVersionName;
+    return log.versionName; // For 'updated' or 'deleted'
+  }
+
+  int _getEventTimestamp(AppLogEntry log, String eventType) {
+    if (eventType == 'deleted') return log.deletionDate ?? log.updateDate;
+    return eventType == 'installed' ? log.installDate : log.updateDate;
   }
 
   IconData _getEventIcon(String eventType) {
@@ -271,7 +287,13 @@ class _AppDetailsPageState extends State<AppDetailsPage>
           final logs = snapshot.data ?? [];
           final latestLog =
               logs.isNotEmpty
-                  ? logs.reduce((a, b) => (a.id ?? 0) > (b.id ?? 0) ? a : b)
+                  ? logs.reduce((a, b) {
+                    final aTimestamp =
+                        a.deletionDate ?? a.updateDate ?? a.installDate;
+                    final bTimestamp =
+                        b.deletionDate ?? b.updateDate ?? b.installDate;
+                    return aTimestamp > bTimestamp ? a : b;
+                  })
                   : widget.log;
           final updateDate = DateTime.fromMillisecondsSinceEpoch(
             latestLog.updateDate,
@@ -290,16 +312,20 @@ class _AppDetailsPageState extends State<AppDetailsPage>
                   child: Row(
                     children: [
                       icon != null
-                          ? Image.memory(
-                            icon,
-                            width: 80,
-                            height: 80,
-                            errorBuilder:
-                                (context, error, stackTrace) => Icon(
-                                  isInstalled ? Icons.apps : Icons.delete,
-                                  size: 80,
-                                  color: Colors.grey[600],
-                                ),
+                          ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(
+                              icon,
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                              errorBuilder:
+                                  (context, error, stackTrace) => Icon(
+                                    isInstalled ? Icons.apps : Icons.delete,
+                                    size: 80,
+                                    color: Colors.grey[600],
+                                  ),
+                            ),
                           )
                           : Icon(
                             isInstalled ? Icons.apps : Icons.delete,
@@ -385,13 +411,17 @@ class _AppDetailsPageState extends State<AppDetailsPage>
                 ),
                 SizedBox(
                   height: 300,
-                  child: ListView.builder(
+                  child: ListView.separated(
                     controller: _scrollController,
                     itemCount: logs.length,
+                    separatorBuilder:
+                        (context, index) =>
+                            const Divider(height: 1, color: Colors.grey),
                     itemBuilder: (context, index) {
                       final log = logs[index];
                       final eventType = _getEventType(log, logs);
-                      final timestamp = log.deletionDate ?? log.updateDate;
+                      final version = _getVersionForEvent(log, eventType);
+                      final timestamp = _getEventTimestamp(log, eventType);
                       final date = DateTime.fromMillisecondsSinceEpoch(
                         timestamp,
                       );
@@ -414,7 +444,7 @@ class _AppDetailsPageState extends State<AppDetailsPage>
                                   color: _getIconColor(eventType),
                                 ),
                                 title: Text(
-                                  '${log.versionName} ($eventType)',
+                                  '$version ($eventType)',
                                   style: const TextStyle(color: Colors.white),
                                 ),
                                 subtitle: Text(

@@ -1,10 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../database/app_log_entry.dart';
 import '../database/database_helper.dart';
 import '../main.dart';
 import 'app_details_page.dart';
-import 'dart:typed_data';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -14,7 +14,7 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage>
-    with SingleTickerProviderStateMixin {
+    with AutomaticKeepAliveClientMixin {
   List<Map<String, dynamic>>? logs;
   List<Map<String, dynamic>> displayLogs = [];
   String? errorMessage;
@@ -22,6 +22,9 @@ class _HistoryPageState extends State<HistoryPage>
   String filterType = 'all';
   String filterTime = 'all';
   bool filterFavorites = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -42,7 +45,6 @@ class _HistoryPageState extends State<HistoryPage>
 
   Future<void> _loadLogs() async {
     try {
-      print('Loading history logs...');
       final fetchedLogs = await dbHelper.getAllAppLogs();
       if (mounted) {
         setState(() {
@@ -71,34 +73,24 @@ class _HistoryPageState extends State<HistoryPage>
             final timestamp =
                 entry.deletionDate ?? entry.updateDate ?? entry.installDate;
 
-            // Filter by event type
             bool typeMatch = true;
             if (filterType != 'all') {
-              final eventType = _getEventType(log);
+              final eventType = _getEventType(entry);
               typeMatch = eventType == filterType;
             }
 
-            // Filter by time range
             bool timeMatch = true;
             if (filterTime != 'all') {
               final diff = now - timestamp;
-              if (filterTime == '24h' && diff > 24 * 60 * 60 * 1000) {
+              if (filterTime == '24h' && diff > 24 * 60 * 60 * 1000)
                 timeMatch = false;
-              } else if (filterTime == 'week' &&
-                  diff > 7 * 24 * 60 * 60 * 1000) {
+              else if (filterTime == 'week' && diff > 7 * 24 * 60 * 60 * 1000)
                 timeMatch = false;
-              } else if (filterTime == 'month' &&
-                  diff > 30 * 24 * 60 * 60 * 1000) {
+              else if (filterTime == 'month' && diff > 30 * 24 * 60 * 60 * 1000)
                 timeMatch = false;
-              }
             }
 
-            // Filter by favorites
-            bool favoriteMatch = true;
-            if (filterFavorites) {
-              favoriteMatch = entry.isFavorite;
-            }
-
+            bool favoriteMatch = !filterFavorites || entry.isFavorite;
             return typeMatch && timeMatch && favoriteMatch;
           }).toList();
     });
@@ -109,17 +101,13 @@ class _HistoryPageState extends State<HistoryPage>
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
     final diff = now.difference(date);
     if (diff.inSeconds < 60) return 'Just now';
-    if (diff.inMinutes < 60)
-      return '${diff.inMinutes} minute${diff.inMinutes == 1 ? '' : 's'} ago';
-    if (diff.inHours < 24)
-      return '${diff.inHours} hour${diff.inHours == 1 ? '' : 's'} ago';
-    if (diff.inDays < 30)
-      return '${diff.inDays} day${diff.inDays == 1 ? '' : 's'} ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 30) return '${diff.inDays}d ago';
     return DateFormat.yMMMd().format(date);
   }
 
-  String _getEventType(Map<String, dynamic> log) {
-    final entry = AppLogEntry.fromMap(log);
+  String _getEventType(AppLogEntry entry) {
     if (entry.deletionDate != null) return 'deleted';
     final previousLogs =
         logs!
@@ -130,24 +118,25 @@ class _HistoryPageState extends State<HistoryPage>
             )
             .map((l) => AppLogEntry.fromMap(l))
             .toList();
-    if (previousLogs.isEmpty) {
-      return 'installed';
-    }
+    if (previousLogs.isEmpty) return 'installed';
     final latestPrevious = previousLogs.reduce(
       (a, b) => (a.id ?? 0) > (b.id ?? 0) ? a : b,
     );
-    if (latestPrevious.deletionDate != null) {
-      return 'installed'; // Reinstall case
-    }
+    if (latestPrevious.deletionDate != null) return 'installed';
     return entry.updateDate > entry.installDate &&
-            entry.updateDate > latestPrevious.updateDate
+            entry.updateDate > (latestPrevious.updateDate ?? 0)
         ? 'updated'
         : 'installed';
   }
 
-  int _getEventTimestamp(Map<String, dynamic> log) {
-    final entry = AppLogEntry.fromMap(log);
-    return entry.deletionDate ?? entry.updateDate ?? entry.installDate;
+  String _getVersionForEvent(AppLogEntry entry, String eventType) {
+    if (eventType == 'installed') return entry.installVersionName;
+    return entry.versionName; // For 'updated' or 'deleted'
+  }
+
+  int _getEventTimestamp(AppLogEntry entry, String eventType) {
+    if (eventType == 'deleted') return entry.deletionDate ?? entry.updateDate;
+    return eventType == 'installed' ? entry.installDate : entry.updateDate;
   }
 
   IconData _getEventIcon(String eventType) {
@@ -178,6 +167,7 @@ class _HistoryPageState extends State<HistoryPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Column(
       children: [
         Padding(
@@ -202,8 +192,8 @@ class _HistoryPageState extends State<HistoryPage>
                   if (value != null && value != filterType) {
                     setState(() {
                       filterType = value;
+                      _filterLogs();
                     });
-                    _filterLogs();
                   }
                 },
               ),
@@ -222,8 +212,8 @@ class _HistoryPageState extends State<HistoryPage>
                   if (value != null && value != filterTime) {
                     setState(() {
                       filterTime = value;
+                      _filterLogs();
                     });
-                    _filterLogs();
                   }
                 },
               ),
@@ -237,8 +227,8 @@ class _HistoryPageState extends State<HistoryPage>
                 onPressed: () {
                   setState(() {
                     filterFavorites = !filterFavorites;
+                    _filterLogs();
                   });
-                  _filterLogs();
                 },
               ),
             ],
@@ -249,28 +239,33 @@ class _HistoryPageState extends State<HistoryPage>
               logs == null && errorMessage != null
                   ? Center(child: Text(errorMessage!))
                   : logs == null
-                  ? const Center(child: Text('Fetching apps...'))
+                  ? const Center(child: CircularProgressIndicator())
                   : displayLogs.isEmpty
-                  ? const Center(child: Text('Fetching apps...'))
-                  : ListView.builder(
+                  ? const Center(child: Text('No history entries found'))
+                  : ListView.separated(
                     itemCount: displayLogs.length,
+                    separatorBuilder:
+                        (context, index) =>
+                            const Divider(height: 1, color: Colors.grey),
                     itemBuilder: (context, index) {
                       final log = AppLogEntry.fromMap(displayLogs[index]);
-                      final eventType = _getEventType(displayLogs[index]);
-                      final timestamp = _getEventTimestamp(displayLogs[index]);
+                      final eventType = _getEventType(log);
+                      final version = _getVersionForEvent(log, eventType);
+                      final timestamp = _getEventTimestamp(log, eventType);
                       return InkWell(
-                        onTap:
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => AppDetailsPage(
-                                      log: log,
-                                      dbHelper: dbHelper,
-                                      selectedLogId: log.id,
-                                    ),
-                              ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => AppDetailsPage(
+                                    log: log,
+                                    dbHelper: dbHelper,
+                                    selectedLogId: log.id,
+                                  ),
                             ),
+                          );
+                        },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16.0,
@@ -280,16 +275,20 @@ class _HistoryPageState extends State<HistoryPage>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               log.icon != null
-                                  ? Image.memory(
-                                    Uint8List.fromList(log.icon!),
-                                    width: 40,
-                                    height: 40,
-                                    errorBuilder:
-                                        (context, error, stackTrace) => Icon(
-                                          Icons.history,
-                                          size: 40,
-                                          color: Colors.grey[600],
-                                        ),
+                                  ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.memory(
+                                      Uint8List.fromList(log.icon!),
+                                      width: 40,
+                                      height: 40,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) => Icon(
+                                            Icons.history,
+                                            size: 40,
+                                            color: Colors.grey[600],
+                                          ),
+                                    ),
                                   )
                                   : Icon(
                                     Icons.history,
@@ -338,7 +337,7 @@ class _HistoryPageState extends State<HistoryPage>
                                             ),
                                             const SizedBox(width: 4),
                                             Text(
-                                              '$eventType ${log.versionName}',
+                                              '$version ($eventType)',
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: Colors.grey[600],

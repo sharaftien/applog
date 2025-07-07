@@ -8,7 +8,7 @@ class AppDetailsPage extends StatefulWidget {
   final Application? app;
   final AppLogEntry log;
   final DatabaseHelper dbHelper;
-  final int? selectedLogId; // ID of the selected log entry
+  final int? selectedLogId;
 
   const AppDetailsPage({
     super.key,
@@ -70,7 +70,7 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
                             ? null
                             : _notesController.text,
                   );
-                  await widget.dbHelper.insertAppLogs([updatedLog]);
+                  await widget.dbHelper.updateAppLog(updatedLog);
                   setState(() {
                     _appLogsFuture = widget.dbHelper.getAppLogs(
                       widget.app?.packageName ?? widget.log.packageName,

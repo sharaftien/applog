@@ -92,6 +92,24 @@ class DatabaseHelper {
     }
   }
 
+  Future<void> updateAppLog(AppLogEntry entry) async {
+    try {
+      final db = await database;
+      await db.update(
+        table,
+        {'notes': entry.notes},
+        where: 'id = ?',
+        whereArgs: [entry.id],
+      );
+      print(
+        'Updated notes for ${entry.appName}, Version: ${entry.versionName}, ID: ${entry.id}',
+      );
+    } catch (e) {
+      print('Error updating app log: $e');
+      rethrow;
+    }
+  }
+
   Future<List<AppLogEntry>> getAppLogs(String packageName) async {
     try {
       final db = await database;

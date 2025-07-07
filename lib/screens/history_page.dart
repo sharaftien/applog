@@ -185,8 +185,11 @@ class _HistoryPageState extends State<HistoryPage>
                         context,
                         MaterialPageRoute(
                           builder:
-                              (context) =>
-                                  AppDetailsPage(log: log, dbHelper: dbHelper),
+                              (context) => AppDetailsPage(
+                                log: log,
+                                dbHelper: dbHelper,
+                                selectedLogId: log.id, // Pass selected log ID
+                              ),
                         ),
                       ),
                 );

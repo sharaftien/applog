@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:device_apps/device_apps.dart';
 import 'package:intl/intl.dart';
+import 'package:device_apps/device_apps.dart';
 import '../database/app_log_entry.dart';
 import '../database/database_helper.dart';
 
@@ -8,12 +8,14 @@ class AppDetailsPage extends StatefulWidget {
   final Application? app;
   final AppLogEntry log;
   final DatabaseHelper dbHelper;
+  final int? selectedLogId; // ID of the selected log entry
 
   const AppDetailsPage({
     super.key,
     this.app,
     required this.log,
     required this.dbHelper,
+    this.selectedLogId,
   });
 
   @override
@@ -22,6 +24,7 @@ class AppDetailsPage extends StatefulWidget {
 
 class _AppDetailsPageState extends State<AppDetailsPage> {
   late Future<List<AppLogEntry>> _appLogsFuture;
+  final TextEditingController _notesController = TextEditingController();
 
   @override
   void initState() {
@@ -32,14 +35,14 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
   }
 
   Future<void> _showNotesDialog(BuildContext context, AppLogEntry log) async {
-    final controller = TextEditingController(text: log.notes ?? '');
+    _notesController.text = log.notes ?? '';
     await showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
             title: Text('Notes for ${log.versionName}'),
             content: TextField(
-              controller: controller,
+              controller: _notesController,
               maxLines: 5,
               decoration: const InputDecoration(
                 hintText: 'Enter notes here',
@@ -62,7 +65,10 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
                     updateDate: log.updateDate,
                     icon: log.icon,
                     deletionDate: log.deletionDate,
-                    notes: controller.text.isEmpty ? null : controller.text,
+                    notes:
+                        _notesController.text.isEmpty
+                            ? null
+                            : _notesController.text,
                   );
                   await widget.dbHelper.insertAppLogs([updatedLog]);
                   setState(() {
@@ -77,6 +83,12 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
             ],
           ),
     );
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
   }
 
   @override
@@ -209,12 +221,16 @@ class _AppDetailsPageState extends State<AppDetailsPage> {
                     final formattedDate = DateFormat(
                       'dd/MM/yy HH:mm',
                     ).format(date);
-                    return ListTile(
-                      title: Text('Version: ${log.versionName}'),
-                      subtitle: Text(
-                        'Updated: $formattedDate${log.notes != null ? '\nNotes: ${log.notes}' : ''}',
+                    final isSelected = log.id == widget.selectedLogId;
+                    return Container(
+                      color: isSelected ? Colors.blue.withOpacity(0.1) : null,
+                      child: ListTile(
+                        title: Text('Version: ${log.versionName}'),
+                        subtitle: Text(
+                          'Updated: $formattedDate${log.notes != null ? '\nNotes: ${log.notes}' : ''}',
+                        ),
+                        onTap: () => _showNotesDialog(context, log),
                       ),
-                      onTap: () => _showNotesDialog(context, log),
                     );
                   },
                 );

@@ -251,7 +251,7 @@ class _HistoryPageState extends State<HistoryPage>
                   : logs == null
                   ? const Center(child: Text('Fetching apps...'))
                   : displayLogs.isEmpty
-                  ? const Center(child: Text('No history found'))
+                  ? const Center(child: Text('Fetching apps...'))
                   : ListView.builder(
                     itemCount: displayLogs.length,
                     itemBuilder: (context, index) {

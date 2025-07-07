@@ -204,92 +204,93 @@ class _UninstalledAppsPageState extends State<UninstalledAppsPage>
   @override
   Widget build(BuildContext context) {
     if (displayApps.isEmpty && errorMessage != null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Uninstalled Apps')),
-        body: Center(child: Text(errorMessage!)),
-      );
+      return Center(child: Text(errorMessage!));
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Uninstalled Apps'),
-        actions: [
-          DropdownButton<String>(
-            value: sortBy,
-            items: const [
-              DropdownMenuItem(value: 'app_name', child: Text('Name')),
-              DropdownMenuItem(
-                value: 'update_date',
-                child: Text('Last Update'),
-              ),
-              DropdownMenuItem(
-                value: 'deletion_date',
-                child: Text('Deletion Date'),
-              ),
-            ],
-            onChanged: (value) {
-              if (value != null && value != sortBy) {
-                setState(() {
-                  sortBy = value;
-                });
-                _sortDisplayApps();
-              }
-            },
-          ),
-          IconButton(
-            icon: AnimatedBuilder(
-              animation: _refreshAnimation,
-              builder:
-                  (context, child) => Transform.rotate(
-                    angle: _refreshAnimation.value * 3.14159 / 180,
-                    child: Icon(
-                      isRefreshing ? Icons.refresh : Icons.refresh_outlined,
-                    ),
-                  ),
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            DropdownButton<String>(
+              value: sortBy,
+              items: const [
+                DropdownMenuItem(value: 'app_name', child: Text('Name')),
+                DropdownMenuItem(
+                  value: 'update_date',
+                  child: Text('Last Update'),
+                ),
+                DropdownMenuItem(
+                  value: 'deletion_date',
+                  child: Text('Deletion Date'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null && value != sortBy) {
+                  setState(() {
+                    sortBy = value;
+                  });
+                  _sortDisplayApps();
+                }
+              },
             ),
-            onPressed: isRefreshing ? null : _fetchUninstalledApps,
-          ),
-        ],
-      ),
-      body:
-          displayApps.isEmpty && isRefreshing
-              ? const Center(child: CircularProgressIndicator())
-              : displayApps.isEmpty
-              ? const Center(child: Text('No uninstalled apps found'))
-              : ListView.builder(
-                itemCount: displayApps.length,
-                itemBuilder: (context, index) {
-                  final log = displayApps[index];
-                  return ListTile(
-                    leading:
-                        log.icon != null
-                            ? Image.memory(
-                              log.icon!,
-                              width: 40,
-                              height: 40,
-                              errorBuilder:
-                                  (context, error, stackTrace) =>
-                                      const Icon(Icons.delete, size: 40),
-                            )
-                            : const Icon(Icons.delete, size: 40),
-                    title: Text(log.appName),
-                    subtitle: Text(
-                      'Version: ${log.versionName}\nDeleted ${_formatRelativeTime(log.deletionDate ?? DateTime.now().millisecondsSinceEpoch)}',
+            IconButton(
+              icon: AnimatedBuilder(
+                animation: _refreshAnimation,
+                builder:
+                    (context, child) => Transform.rotate(
+                      angle: _refreshAnimation.value * 3.14159 / 180,
+                      child: Icon(
+                        isRefreshing ? Icons.refresh : Icons.refresh_outlined,
+                      ),
                     ),
-                    onTap:
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) => AppDetailsPage(
-                                  log: log,
-                                  dbHelper: dbHelper,
-                                ),
-                          ),
-                        ),
-                  );
-                },
               ),
+              onPressed: isRefreshing ? null : _fetchUninstalledApps,
+            ),
+          ],
+        ),
+        Expanded(
+          child:
+              displayApps.isEmpty && isRefreshing
+                  ? const Center(child: CircularProgressIndicator())
+                  : displayApps.isEmpty
+                  ? const Center(child: Text('No uninstalled apps found'))
+                  : ListView.builder(
+                    itemCount: displayApps.length,
+                    itemBuilder: (context, index) {
+                      final log = displayApps[index];
+                      return ListTile(
+                        leading:
+                            log.icon != null
+                                ? Image.memory(
+                                  log.icon!,
+                                  width: 40,
+                                  height: 40,
+                                  errorBuilder:
+                                      (context, error, stackTrace) =>
+                                          const Icon(Icons.delete, size: 40),
+                                )
+                                : const Icon(Icons.delete, size: 40),
+                        title: Text(log.appName),
+                        subtitle: Text(
+                          'Version: ${log.versionName}\nDeleted ${_formatRelativeTime(log.deletionDate ?? DateTime.now().millisecondsSinceEpoch)}',
+                        ),
+                        onTap:
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => AppDetailsPage(
+                                      log: log,
+                                      dbHelper: dbHelper,
+                                    ),
+                              ),
+                            ),
+                      );
+                    },
+                  ),
+        ),
+      ],
     );
   }
 }

@@ -4,7 +4,7 @@ import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
-  static const _databaseVersion = 6; // Current version with notes
+  static const _databaseVersion = 6;
   static const table = 'app_logs';
 
   static Database? _database;
@@ -111,7 +111,7 @@ class DatabaseHelper {
   }
 
   Future<List<AppLogEntry>> getLatestAppLogs({
-    String sortBy = 'app_name',
+    String sortBy = 'update_date',
   }) async {
     try {
       final db = await database;
@@ -127,7 +127,13 @@ class DatabaseHelper {
       print(
         'Retrieved ${maps.length} latest app logs, sorted by $sortBy',
       ); // Debug log
-      return List.generate(maps.length, (i) => AppLogEntry.fromMap(maps[i]));
+      return List.generate(maps.length, (i) {
+        final entry = AppLogEntry.fromMap(maps[i]);
+        print(
+          'App: ${entry.appName}, Update: ${entry.installDate}',
+        ); // Debug log for update_date
+        return entry;
+      });
     } catch (e) {
       print('Error retrieving latest app logs: $e'); // Debug log
       rethrow;
@@ -136,7 +142,7 @@ class DatabaseHelper {
 
   Future<List<AppLogEntry>> getUninstalledAppLogs(
     List<String> installedPackageNames, {
-    String sortBy = 'app_name',
+    String sortBy = 'update_date',
   }) async {
     try {
       final db = await database;
@@ -157,9 +163,30 @@ class DatabaseHelper {
       print(
         'Retrieved ${maps.length} logs for uninstalled apps, sorted by $sortBy',
       ); // Debug log
-      return List.generate(maps.length, (i) => AppLogEntry.fromMap(maps[i]));
+      return List.generate(maps.length, (i) {
+        final entry = AppLogEntry.fromMap(maps[i]);
+        print(
+          'App: ${entry.appName}, Update: ${entry.updateDate}, Deletion: ${entry.deletionDate ?? 'N/A'}',
+        ); // Debug log
+        return entry;
+      });
     } catch (e) {
       print('Error retrieving uninstalled app logs: $e'); // Debug log
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllAppLogs() async {
+    try {
+      final db = await database;
+      final maps = await db.query(
+        table,
+        orderBy: 'update_date DESC, deletion_date DESC, install_date DESC',
+      );
+      print('Retrieved ${maps.length} total app logs for history'); // Debug log
+      return maps;
+    } catch (e) {
+      print('Error retrieving all app logs: $e'); // Debug log
       rethrow;
     }
   }

@@ -1,7 +1,7 @@
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
-import 'app_log_entry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_log_entry.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'applog.db';
@@ -121,7 +121,7 @@ class DatabaseHelper {
       final db = await database;
       final maps = await db.query(
         table,
-        where: 'package_name = ? AND deletion_date IS NULL',
+        where: 'package_name = ?',
         whereArgs: [packageName],
         orderBy: 'id DESC',
       );
@@ -142,8 +142,11 @@ class DatabaseHelper {
           sortBy == 'update_date' ? 'update_date DESC' : 'app_name ASC';
       final maps = await db.rawQuery('''
         SELECT * FROM $table
-        WHERE id IN (
-          SELECT MAX(id) FROM $table GROUP BY package_name
+        WHERE deletion_date IS NULL
+        AND id IN (
+          SELECT MAX(id) FROM $table 
+          WHERE deletion_date IS NULL 
+          GROUP BY package_name
         )
         ORDER BY $orderBy
       ''');
@@ -170,14 +173,10 @@ class DatabaseHelper {
       final maps = await db.rawQuery('''
         SELECT * FROM $table
         WHERE deletion_date IS NOT NULL
-        AND package_name NOT IN (
-          SELECT package_name FROM $table
-          WHERE deletion_date IS NULL
-          AND id > (
-            SELECT MAX(id) FROM $table
-            WHERE package_name = $table.package_name
-            AND deletion_date IS NOT NULL
-          )
+        AND id IN (
+          SELECT MAX(id) FROM $table
+          WHERE deletion_date IS NOT NULL
+          GROUP BY package_name
         )
         ORDER BY $orderBy
       ''');

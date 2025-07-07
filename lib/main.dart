@@ -210,12 +210,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AppLog',
+      title: 'App Log',
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
-        primaryColor: Colors.grey[800]!,
+        primaryColor: Colors.grey[900]!,
         colorScheme: ColorScheme.dark(
-          primary: Colors.grey[800]!,
+          primary: Colors.grey[900]!,
           onPrimary: Colors.white,
           surface: Colors.black,
           onSurface: Colors.white,
@@ -229,20 +229,28 @@ class MyApp extends StatelessWidget {
           ),
         ),
         cardTheme: CardTheme(
-          color: Colors.grey[900],
+          color: Colors.grey[850],
           elevation: 2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.grey[800],
+          backgroundColor: Colors.grey[900],
           foregroundColor: Colors.white,
         ),
+        tabBarTheme: TabBarTheme(
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white, // Keep tab indicator
+          dividerColor: Colors.transparent, // Remove divider line across screen
+          labelStyle: TextStyle(fontWeight: FontWeight.bold),
+          unselectedLabelStyle: TextStyle(fontWeight: FontWeight.normal),
+        ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: Colors.grey[800],
+          backgroundColor: Colors.grey[900],
           foregroundColor: Colors.white,
         ),
       ),
-      home: const MainPage(),
+      home: MainPage(),
     );
   }
 }
@@ -344,9 +352,12 @@ class _MainPageState extends State<MainPage>
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('AppLog'),
-          bottom: const TabBar(
-            tabs: [
+          title: const Text('App Log'),
+          titleSpacing: 16.0,
+          toolbarHeight: 48.0,
+          bottom: TabBar(
+            padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+            tabs: const [
               Tab(text: 'History'),
               Tab(text: 'Installed'),
               Tab(text: 'Uninstalled'),
@@ -368,7 +379,7 @@ class _MainPageState extends State<MainPage>
               child: FloatingActionButton(
                 onPressed: isRefreshing ? null : _fetchApps,
                 backgroundColor:
-                    isRefreshing ? Colors.grey[600] : Colors.grey[800],
+                    isRefreshing ? Colors.grey[600] : Colors.grey[900],
                 child: RotationTransition(
                   turns: Tween(begin: 0.0, end: 1.0).animate(_controller!),
                   child: const Icon(Icons.refresh, color: Colors.white),

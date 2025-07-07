@@ -52,7 +52,7 @@ class _HistoryPageState extends State<HistoryPage>
         });
       }
     } catch (e) {
-      print('Error loading history logs: $e');
+      print('Fetching history... $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,

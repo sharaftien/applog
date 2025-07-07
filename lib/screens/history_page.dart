@@ -17,44 +17,21 @@ class _HistoryPageState extends State<HistoryPage>
   List<Map<String, dynamic>>? logs;
   String? errorMessage;
   final DatabaseHelper dbHelper = DatabaseHelper();
-  bool isRefreshing = false;
-  AnimationController? _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 1),
-      vsync: this,
-    )..addListener(() {
-      setState(() {});
-    });
     _loadLogs();
     AppStateManager().addListener(_onAppStateUpdate);
-    if (AppStateManager().isFetching) {
-      setState(() {
-        isRefreshing = true;
-        _controller?.repeat();
-      });
-    }
   }
 
   @override
   void dispose() {
     AppStateManager().removeListener(_onAppStateUpdate);
-    _controller?.dispose();
     super.dispose();
   }
 
   Future<void> _onAppStateUpdate() async {
-    setState(() {
-      isRefreshing = AppStateManager().isFetching;
-      if (isRefreshing) {
-        _controller?.repeat();
-      } else {
-        _controller?.stop();
-      }
-    });
     await _loadLogs();
   }
 
@@ -74,30 +51,6 @@ class _HistoryPageState extends State<HistoryPage>
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to load history: $e')));
-      }
-    }
-  }
-
-  Future<void> _fetchApps() async {
-    setState(() {
-      isRefreshing = true;
-      _controller?.repeat();
-    });
-    try {
-      await AppStateManager().fetchAndUpdateApps();
-    } catch (e) {
-      print('Error fetching apps for history: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to fetch apps: $e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          isRefreshing = false;
-          _controller?.stop();
-        });
       }
     }
   }
@@ -152,62 +105,46 @@ class _HistoryPageState extends State<HistoryPage>
       return Center(child: Text(errorMessage!));
     }
 
-    return Stack(
-      children: [
-        logs == null
-            ? const Center(child: CircularProgressIndicator())
-            : logs!.isEmpty
-            ? const Center(child: Text('No history found'))
-            : ListView.builder(
-              itemCount: logs!.length,
-              itemBuilder: (context, index) {
-                final log = AppLogEntry.fromMap(logs![index]);
-                final eventType = _getEventType(logs![index]);
-                final timestamp = _getEventTimestamp(logs![index]);
-                return ListTile(
-                  leading:
-                      log.icon != null
-                          ? Image.memory(
-                            log.icon!,
-                            width: 40,
-                            height: 40,
-                            errorBuilder:
-                                (context, error, stackTrace) =>
-                                    const Icon(Icons.history, size: 40),
-                          )
-                          : const Icon(Icons.history, size: 40),
-                  title: Text('$eventType ${log.appName}'),
-                  subtitle: Text(
-                    'Version: ${log.versionName}\n${_formatRelativeTime(timestamp)}',
+    return logs == null
+        ? const Center(child: CircularProgressIndicator())
+        : logs!.isEmpty
+        ? const Center(child: Text('No history found'))
+        : ListView.builder(
+          itemCount: logs!.length,
+          itemBuilder: (context, index) {
+            final log = AppLogEntry.fromMap(logs![index]);
+            final eventType = _getEventType(logs![index]);
+            final timestamp = _getEventTimestamp(logs![index]);
+            return ListTile(
+              leading:
+                  log.icon != null
+                      ? Image.memory(
+                        log.icon!,
+                        width: 40,
+                        height: 40,
+                        errorBuilder:
+                            (context, error, stackTrace) =>
+                                const Icon(Icons.history, size: 40),
+                      )
+                      : const Icon(Icons.history, size: 40),
+              title: Text('$eventType ${log.appName}'),
+              subtitle: Text(
+                'Version: ${log.versionName}\n${_formatRelativeTime(timestamp)}',
+              ),
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => AppDetailsPage(
+                            log: log,
+                            dbHelper: dbHelper,
+                            selectedLogId: log.id,
+                          ),
+                    ),
                   ),
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) => AppDetailsPage(
-                                log: log,
-                                dbHelper: dbHelper,
-                                selectedLogId: log.id, // Pass selected log ID
-                              ),
-                        ),
-                      ),
-                );
-              },
-            ),
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: FloatingActionButton(
-            onPressed: isRefreshing ? null : _fetchApps,
-            backgroundColor: isRefreshing ? Colors.blue.shade300 : Colors.blue,
-            child: RotationTransition(
-              turns: Tween(begin: 0.0, end: 1.0).animate(_controller!),
-              child: const Icon(Icons.refresh, color: Colors.white),
-            ),
-          ),
-        ),
-      ],
-    );
+            );
+          },
+        );
   }
 }

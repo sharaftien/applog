@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:device_apps/device_apps.dart';
+import 'package:path/path.dart' as path;
+import 'package:sqflite/sqflite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'database/app_log_entry.dart';
+import 'database/database_helper.dart';
 import 'screens/history_page.dart';
 import 'screens/installed_apps_page.dart';
 import 'screens/uninstalled_apps_page.dart';
-import 'package:device_apps/device_apps.dart';
-import 'database/app_log_entry.dart';
-import 'database/database_helper.dart';
 
 void main() {
   runApp(const MyApp());
@@ -163,11 +166,70 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends State<MainPage>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+  bool isRefreshing = false;
+
   @override
   void initState() {
     super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    )..addListener(() {
+      setState(() {});
+    });
     AppStateManager().fetchAndUpdateApps();
+    AppStateManager().addListener(_onAppStateUpdate);
+    if (AppStateManager().isFetching) {
+      setState(() {
+        isRefreshing = true;
+        _controller?.repeat();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    AppStateManager().removeListener(_onAppStateUpdate);
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _onAppStateUpdate() {
+    setState(() {
+      isRefreshing = AppStateManager().isFetching;
+      if (isRefreshing) {
+        _controller?.repeat();
+      } else {
+        _controller?.stop();
+      }
+    });
+  }
+
+  Future<void> _fetchApps() async {
+    setState(() {
+      isRefreshing = true;
+      _controller?.repeat();
+    });
+    try {
+      await AppStateManager().fetchAndUpdateApps();
+    } catch (e) {
+      print('Error fetching apps: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to fetch apps: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isRefreshing = false;
+          _controller?.stop();
+        });
+      }
+    }
   }
 
   @override
@@ -185,8 +247,29 @@ class _MainPageState extends State<MainPage> {
             ],
           ),
         ),
-        body: const TabBarView(
-          children: [HistoryPage(), InstalledAppsPage(), UninstalledAppsPage()],
+        body: Stack(
+          children: [
+            const TabBarView(
+              children: [
+                HistoryPage(),
+                InstalledAppsPage(),
+                UninstalledAppsPage(),
+              ],
+            ),
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: FloatingActionButton(
+                onPressed: isRefreshing ? null : _fetchApps,
+                backgroundColor:
+                    isRefreshing ? Colors.blue.shade300 : Colors.blue,
+                child: RotationTransition(
+                  turns: Tween(begin: 0.0, end: 1.0).animate(_controller!),
+                  child: const Icon(Icons.refresh, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

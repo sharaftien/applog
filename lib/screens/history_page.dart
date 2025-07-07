@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../database/app_log_entry.dart';
 import '../database/database_helper.dart';
-import 'app_details_page.dart';
 import '../main.dart';
+import 'app_details_page.dart';
 import 'dart:typed_data';
 
 class HistoryPage extends StatefulWidget {
@@ -130,13 +130,15 @@ class _HistoryPageState extends State<HistoryPage>
             )
             .map((l) => AppLogEntry.fromMap(l))
             .toList();
-    if (previousLogs.isEmpty ||
-        previousLogs.every((l) => l.deletionDate != null)) {
+    if (previousLogs.isEmpty) {
       return 'installed';
     }
     final latestPrevious = previousLogs.reduce(
       (a, b) => (a.id ?? 0) > (b.id ?? 0) ? a : b,
     );
+    if (latestPrevious.deletionDate != null) {
+      return 'installed'; // Reinstall case
+    }
     return entry.updateDate > entry.installDate &&
             entry.updateDate > latestPrevious.updateDate
         ? 'updated'
@@ -247,7 +249,7 @@ class _HistoryPageState extends State<HistoryPage>
               logs == null && errorMessage != null
                   ? Center(child: Text(errorMessage!))
                   : logs == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: Text('Fetching apps...'))
                   : displayLogs.isEmpty
                   ? const Center(child: Text('No history found'))
                   : ListView.builder(

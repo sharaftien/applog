@@ -36,7 +36,7 @@ class AppStateManager {
     }
   }
 
-  Future<void> fetchAndUpdateApps() async {
+  Future<void> fetchAndUpdateApps({bool isInitialLaunch = false}) async {
     if (_isFetching) return;
     _isFetching = true;
     _notifyListeners();
@@ -48,7 +48,8 @@ class AppStateManager {
         onlyAppsWithLaunchIntent: true,
       );
       final currentTime = DateTime.now().millisecondsSinceEpoch;
-      final isFirstLaunch = await _dbHelper.isDatabaseEmpty();
+      final isFirstLaunch =
+          isInitialLaunch || await _dbHelper.isDatabaseEmpty();
       final allLogs = isFirstLaunch ? [] : await _dbHelper.getAllAppLogs();
       final installedPackageNames =
           installedApps.map((app) => app.packageName).toList();
@@ -136,6 +137,63 @@ class AppStateManager {
         await _dbHelper.insertAppLogs(newEntries);
       }
       await _dbHelper.setLastSyncTime(currentTime);
+
+      // Perform a second fetch for initial launch to ensure updates are captured
+      if (isFirstLaunch) {
+        print('Performing second fetch for initial launch...');
+        final secondInstalledApps = await DeviceApps.getInstalledApplications(
+          includeAppIcons: true,
+          includeSystemApps: false,
+          onlyAppsWithLaunchIntent: true,
+        );
+        final secondInstalledPackageNames =
+            secondInstalledApps.map((app) => app.packageName).toList();
+        final secondAllLogs = await _dbHelper.getAllAppLogs();
+        final secondExistingMap = <String, List<AppLogEntry>>{};
+        for (var log in secondAllLogs) {
+          final entry = AppLogEntry.fromMap(log);
+          secondExistingMap.putIfAbsent(entry.packageName, () => []).add(entry);
+        }
+        final secondNewEntries = <AppLogEntry>[];
+
+        for (var app in secondInstalledApps) {
+          final currentVersion = app.versionName ?? 'N/A';
+          final installTime = app.installTimeMillis ?? currentTime;
+          final updateTime = app.updateTimeMillis ?? currentTime;
+          final icon = app is ApplicationWithIcon ? app.icon : null;
+
+          final existingLogs = secondExistingMap[app.packageName] ?? [];
+          final latestLog =
+              existingLogs.isNotEmpty
+                  ? existingLogs.reduce(
+                    (a, b) => (a.id ?? 0) > (b.id ?? 0) ? a : b,
+                  )
+                  : null;
+
+          if (existingLogs.isNotEmpty &&
+              (latestLog!.versionName != currentVersion ||
+                  latestLog.updateDate != updateTime)) {
+            secondNewEntries.add(
+              AppLogEntry(
+                packageName: app.packageName,
+                appName: app.appName,
+                versionName: currentVersion,
+                installDate: latestLog.installDate,
+                updateDate: updateTime,
+                icon: icon,
+                deletionDate: null,
+                notes: latestLog.notes,
+                isFavorite: latestLog.isFavorite,
+              ),
+            );
+          }
+        }
+
+        if (secondNewEntries.isNotEmpty) {
+          await _dbHelper.insertAppLogs(secondNewEntries);
+        }
+        await _dbHelper.setLastSyncTime(currentTime);
+      }
     } catch (e) {
       print('Error fetching apps: $e');
       rethrow;
@@ -197,7 +255,7 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   AnimationController? _controller;
   bool isRefreshing = false;
 
@@ -210,9 +268,26 @@ class _MainPageState extends State<MainPage>
     )..addListener(() {
       setState(() {});
     });
-    AppStateManager().fetchAndUpdateApps();
+    WidgetsBinding.instance.addObserver(this);
+    _checkAndFetchApps();
     AppStateManager().addListener(_onAppStateUpdate);
-    if (AppStateManager().isFetching) {
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _fetchApps();
+    }
+  }
+
+  Future<void> _checkAndFetchApps() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isFirstLaunch = prefs.getBool('is_first_launch') ?? true;
+    await AppStateManager().fetchAndUpdateApps(isInitialLaunch: isFirstLaunch);
+    if (isFirstLaunch) {
+      await prefs.setBool('is_first_launch', false);
+    }
+    if (mounted && AppStateManager().isFetching) {
       setState(() {
         isRefreshing = true;
         _controller?.repeat();
@@ -222,6 +297,7 @@ class _MainPageState extends State<MainPage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     AppStateManager().removeListener(_onAppStateUpdate);
     _controller?.dispose();
     super.dispose();
